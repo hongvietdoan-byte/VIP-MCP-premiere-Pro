@@ -358,7 +358,7 @@ async function _cmdGetSequenceInfo() {
   if (!sequence) throw new Error("Không có sequence active. Hãy mở 1 timeline.");
 
   let name = "Active Sequence";
-  try { name = await sequence.getName() || name; } catch {}
+  try { name = sequence.name || (await sequence.getName()) || name; } catch {}
 
   let frameWidth = 1920, frameHeight = 1080, frameRate = 25;
   let _fpsDebug = {};

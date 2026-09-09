@@ -1477,7 +1477,7 @@ async function getProjectInfo() {
   const sequence = await project.getActiveSequence();
   let activeSequenceName = "Active Sequence"; // fallback như _cmdGetSequenceInfo
   if (sequence) {
-    try { activeSequenceName = (await sequence.getName()) || activeSequenceName; } catch {}
+    try { activeSequenceName = sequence.name || (await sequence.getName()) || activeSequenceName; } catch {}
   }
 
   // Đọc danh sách sequence — thử getSequences() rồi fallback sang activeSequence
@@ -1487,7 +1487,7 @@ async function getProjectInfo() {
     const allSequences = await project.getSequences();
     for (const seq of (allSequences || [])) {
       try {
-        const name = (await seq.getName()) || "Sequence";
+        const name = seq.name || (await seq.getName()) || "Sequence";
         sequences.push({ name });
       } catch {}
     }
@@ -3028,88 +3028,32 @@ async function countAllTrackItems(sequence) {
 }
 
 async function insertOrOverwriteClip({ itemName, startSeconds, videoTrackIndex = 0, audioTrackIndex = 0, durationSeconds, mode }, log) {
-  if (!itemName) throw new Error("Phải truyền itemName (tên item trong Project panel, kể cả trong bin con).");
-  if (startSeconds == null) throw new Error("Phải truyền startSeconds.");
-
-  const project = await ppro.Project.getActiveProject();
-  if (!project) throw new Error("Không tìm thấy project đang mở.");
-  const sequence = await project.getActiveSequence();
-  if (!sequence) throw new Error("Không có sequence active.");
-
-  const projectItem = await findProjectItemByName(project, itemName);
-  if (!projectItem) throw new Error(`Không tìm thấy item "${itemName}" trong Project panel (đã tìm cả trong bin con).`);
-
-  const sequenceEditor = ppro.SequenceEditor.getEditor(sequence);
-  if (!sequenceEditor) throw new Error("Không lấy được SequenceEditor cho sequence hiện tại — API có thể không khả dụng trong bản Premiere này.");
-
-  const vCountBefore = await sequence.getVideoTrackCount();
-  const aCountBefore = await sequence.getAudioTrackCount();
-  const tick = secondsToTick(startSeconds);
-
-  let ok;
-  await project.lockedAccess(() => {
-    ok = project.executeTransaction((compoundAction) => {
-      const action = mode === "insert"
-        ? sequenceEditor.createInsertProjectItemAction(projectItem, tick, videoTrackIndex, audioTrackIndex, true)
-        : sequenceEditor.createOverwriteItemAction(projectItem, tick, videoTrackIndex, audioTrackIndex);
-      compoundAction.addAction(action);
-    }, `${mode === "insert" ? "Insert" : "Overwrite"} "${itemName}" qua MCP`);
-  });
-  if (!ok) throw new Error("executeTransaction trả về false khi đặt clip lên timeline.");
-
-  // Nếu trackIndex vượt quá số track hiện có, kiểm tra xem Premiere có tự tạo track mới không
-  // (workaround chưa được Adobe xác nhận chính thức — báo lỗi rõ nếu không xảy ra, không giả vờ thành công).
-  const vCountAfter = await sequence.getVideoTrackCount();
-  const aCountAfter = await sequence.getAudioTrackCount();
-  const neededNewVideoTrack = videoTrackIndex >= vCountBefore;
-  const neededNewAudioTrack = audioTrackIndex >= aCountBefore;
-  if (neededNewVideoTrack && vCountAfter <= videoTrackIndex) {
-    throw new Error(`videoTrackIndex=${videoTrackIndex} vượt quá số video track hiện có (${vCountBefore}) và Premiere không tự tạo track mới trên bản này. Chưa có API script thêm track — cần tạo track thủ công trước (Sequence menu → Add Tracks) rồi chạy lại.`);
-  }
-  if (neededNewAudioTrack && aCountAfter <= audioTrackIndex) {
-    throw new Error(`audioTrackIndex=${audioTrackIndex} vượt quá số audio track hiện có (${aCountBefore}) và Premiere không tự tạo track mới trên bản này. Chưa có API script thêm track — cần tạo track thủ công trước rồi chạy lại.`);
-  }
-
-  // Tìm lại track item vừa đặt trên video track đích để verify + set duration (ảnh tĩnh không có duration mặc định đúng ý)
-  let newItem = null;
-  try {
-    const track = await sequence.getVideoTrack(videoTrackIndex);
-    const trackItemsOnTrack = await track.getTrackItems(ppro.Constants.TrackItemType.CLIP, false);
-    for (let i = trackItemsOnTrack.length - 1; i >= 0; i--) {
-      const item = trackItemsOnTrack[i];
-      const itemStart = (await item.getInPoint()).seconds;
-      if (Math.abs(itemStart - startSeconds) < 0.05) { newItem = item; break; }
-    }
-  } catch (e) {
-    throw new Error(`Đặt clip có vẻ đã chạy nhưng không đọc lại được video track ${videoTrackIndex} để xác nhận: ${e.message}`);
-  }
-  if (!newItem) {
-    throw new Error(`executeTransaction báo thành công nhưng không tìm lại được track item mới tại ${startSeconds}s trên video track ${videoTrackIndex} — kiểm tra timeline thủ công trước khi tin kết quả này.`);
-  }
-
-  if (durationSeconds != null) {
-    const outTick = secondsToTick(startSeconds + durationSeconds);
-    let ok2;
-    await project.lockedAccess(() => {
-      ok2 = project.executeTransaction((compoundAction) => {
-        compoundAction.addAction(newItem.createSetOutPointAction(outTick));
-      }, `Set duration cho "${itemName}"`);
-    });
-    if (!ok2) throw new Error("executeTransaction trả về false khi set duration cho clip vừa đặt.");
-  }
-
-  let finalOut = null;
-  try { finalOut = (await newItem.getOutPoint()).seconds; } catch {}
-
-  return {
-    placed: true,
-    itemName,
-    startSeconds,
-    endSeconds: finalOut,
-    videoTrackIndex,
-    audioTrackIndex,
-    mode
-  };
+  // CHƯA GIẢI QUYẾT ĐƯỢC — xem [[premiere-25-6-4-api-corrections]] / [[premiere-mcp]] memory,
+  // mục insert_clip, cập nhật 2026-09-10.
+  //
+  // Đã xác nhận: SequenceEditor.createInsertProjectItemAction/createOverwriteItemAction ĐẶT ĐƯỢC
+  // clip thật (track item count tăng đúng 1 mỗi lần gọi) nhưng BỎ QUA HOÀN TOÀN tham số TickTime
+  // truyền vào — clip luôn bị "kẹp" vào đúng 1 vị trí cố định (~1 giờ trừ 1 frame, tái hiện y hệt
+  // trên cả sequence 23.976fps lẫn 60fps, chứng tỏ đây là hằng số nội bộ chứ không phải lỗi tính
+  // toán phía mình — đã verify tick truyền vào luôn đúng 100% qua log chẩn đoán trực tiếp).
+  //
+  // Đã thử và đều thất bại:
+  //  1. Cộng sequence.getZeroPoint()/getSettings()/getInPoint() vào tick trước khi truyền — cả 3
+  //     API đều trả về dữ liệu rỗng ({}) hoặc vô nghĩa (getInPoint trả -400000s, rõ ràng là giá trị
+  //     sentinel "chưa set", không phải zero point thật).
+  //  2. Đặt tạm rồi di chuyển lại bằng createSetInPointAction() riêng lẻ — không có tác dụng gì,
+  //     clip vẫn nằm nguyên ở vị trí cũ sau khi gọi.
+  //  3. Set cả InPoint + OutPoint cùng lúc trong 1 transaction để di chuyển — làm Premiere
+  //     CRASH NATIVE ("A nullptr was dereferenced"). KHÔNG được thử lại cách này.
+  //
+  // Throw ngay từ đầu (TRƯỚC khi chèn gì) để không tiếp tục tạo thêm clip rác ở vị trí sai trên
+  // timeline mỗi lần tool này được gọi, cho tới khi tìm được hướng khắc phục an toàn khác.
+  throw new Error(
+    `insert_clip/overwrite_clip hiện KHÔNG dùng được: đã xác nhận Premiere 25.6.4 luôn đặt clip vào ` +
+    `1 vị trí cố định (~1 giờ trên timeline) bất kể startSeconds truyền vào, và các cách khắc phục đã ` +
+    `thử đều thất bại (1 cách còn gây crash Premiere, không thử lại). Cần nghiên cứu thêm ở phiên sau ` +
+    `— xem memory "premiere-25-6-4-api-corrections" mục insert_clip để biết chi tiết đã thử.`
+  );
 }
 
 async function insertClip(params, log) {
@@ -3167,11 +3111,11 @@ async function createSequence({ name, fromSelectedMedia = false }) {
 
   const before = await project.getSequences();
   const beforeNames = new Set();
-  for (const s of (before || [])) { try { beforeNames.add(await s.getName()); } catch {} }
+  for (const s of (before || [])) { try { beforeNames.add(s.name || (await s.getName())); } catch {} }
 
-  // project.createSequence()/createSequenceFromMedia() không trả về đúng Sequence object dùng được
-  // (xác nhận qua test thật: kết quả trả về không có method getName) — thay vì tin giá trị trả về,
-  // tìm sequence mới bằng cách so sánh danh sách tên trước/sau, giống duplicateSequence() đã làm.
+  // LƯU Ý 2026-09-10: project.createSequence() THỰC RA HOẠT ĐỘNG ĐÚNG — lần trước tưởng nhầm là
+  // no-op vì bước verify dùng s.getName() (sai, method này không tồn tại trên Sequence, đúng phải
+  // là property s.name) nên luôn không tìm thấy sequence mới, dù nó đã được tạo thật. Đã fix.
   if (fromSelectedMedia) {
     const items = await getSelectedProjectItemsForSequence(project);
     if (!items || items.length === 0) throw new Error("fromSelectedMedia=true nhưng không có item nào đang chọn trong Project panel.");
@@ -3184,7 +3128,7 @@ async function createSequence({ name, fromSelectedMedia = false }) {
   let confirmedName = null;
   for (const s of afterList) {
     let n = null;
-    try { n = await s.getName(); } catch {}
+    try { n = s.name || (await s.getName()); } catch {}
     if (n != null && !beforeNames.has(n)) { confirmedName = n; break; }
   }
   if (confirmedName == null) {
@@ -3214,7 +3158,7 @@ async function duplicateSequence({ sourceSequenceName }) {
     const all = await project.getSequences();
     let found = null;
     for (const s of (all || [])) {
-      try { if ((await s.getName()) === sourceSequenceName) { found = s; break; } } catch {}
+      try { if ((s.name || (await s.getName())) === sourceSequenceName) { found = s; break; } } catch {}
     }
     if (!found) throw new Error(`Không tìm thấy sequence "${sourceSequenceName}".`);
     sourceSequence = found;
@@ -3226,7 +3170,7 @@ async function duplicateSequence({ sourceSequenceName }) {
   }
 
   const beforeNames = new Set();
-  for (const s of (await project.getSequences()) || []) { try { beforeNames.add(await s.getName()); } catch {} }
+  for (const s of (await project.getSequences()) || []) { try { beforeNames.add(s.name || (await s.getName())); } catch {} }
 
   let ok;
   await project.lockedAccess(() => {
@@ -3240,7 +3184,7 @@ async function duplicateSequence({ sourceSequenceName }) {
   let newSequenceName = null;
   for (const s of afterList) {
     try {
-      const n = await s.getName();
+      const n = s.name || (await s.getName());
       if (!beforeNames.has(n)) { newSequenceName = n; break; }
     } catch {}
   }
@@ -3248,7 +3192,7 @@ async function duplicateSequence({ sourceSequenceName }) {
     throw new Error("executeTransaction báo thành công nhưng không tìm thấy sequence mới trong danh sách — không xác nhận được duplicate có thực sự xảy ra không.");
   }
 
-  return { duplicated: true, sourceSequenceName: sourceSequenceName || (await sourceSequence.getName()), newSequenceName };
+  return { duplicated: true, sourceSequenceName: sourceSequenceName || sourceSequence.name || (await sourceSequence.getName()), newSequenceName };
 }
 
 async function setActiveSequenceTool({ name }) {
@@ -3259,7 +3203,7 @@ async function setActiveSequenceTool({ name }) {
   const all = (await project.getSequences()) || [];
   let target = null;
   for (const s of all) {
-    try { if ((await s.getName()) === name) { target = s; break; } } catch {}
+    try { if ((s.name || (await s.getName())) === name) { target = s; break; } } catch {}
   }
   if (!target) throw new Error(`Không tìm thấy sequence "${name}" trong project.`);
 
@@ -3267,7 +3211,7 @@ async function setActiveSequenceTool({ name }) {
 
   const confirm = await project.getActiveSequence();
   let confirmName = null;
-  try { confirmName = confirm ? await confirm.getName() : null; } catch {}
+  try { confirmName = confirm ? (confirm.name || (await confirm.getName())) : null; } catch {}
   if (confirmName !== name) {
     throw new Error(`setActiveSequence() chạy xong nhưng sequence active hiện tại là "${confirmName}", không phải "${name}" — không xác nhận được API có hoạt động đúng không.`);
   }
