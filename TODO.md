@@ -2,6 +2,36 @@
 
 Cập nhật lần cuối: 2026-09-10. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
+## 🚧 ĐANG LÀM — Workflow "Mic Check" tối ưu, Phương án B (2026-09-10)
+
+User yêu cầu tối ưu workflow FFWS (video nền + ảnh theo caption + SRT) thành quy trình A→Z nhanh hơn, không cần Claude cho các lần chạy lại. Đã chốt **Phương án B**: chuẩn hoá input thành JSON/SRT thay vì đọc thẳng `.docx` trong plugin (tránh phải nhúng thư viện unzip vào UXP — xem lý do so sánh Phương án A/B trong lịch sử chat, tóm tắt: A (nhúng JSZip vào plugin) không lag nhưng dễ vỡ vì cấu trúc XML Word không cố định + khó debug trong Premiere; B dùng Node ngoài Premiere, input JSON có schema rõ, ít rủi ro hơn).
+
+### Kiến trúc đã chốt
+
+**Setup 1 lần** (không lặp lại mỗi video):
+- **A.** `docx_to_json.js` (Node.js, chạy NGOÀI Premiere) — đọc file `.docx` (bảng Time Stamp/Player/EN/Ảnh), xuất `cues.json`: `{"cues":[{"start":0.2,"end":1.333,"text":"...","image":"ảnh 1.png"},...]}`. **Bắt buộc có bước validate**: quét mọi giá trị cột Ảnh xuất hiện trong docx, đối chiếu với file thật trong thư mục ảnh — báo lỗi rõ ràng nếu thiếu file (không chặn nếu thư mục có ảnh thừa không dùng tới). Số lượng ảnh KHÔNG hardcode — tự co giãn theo dữ liệu thật (3 ảnh, 5 ảnh đều chạy được, không cần sửa code).
+- **B.** `srt_to_json.js` hoặc gộp chung — parse `.srt` ra cùng cấu trúc cue, dùng đối chiếu chéo với JSON từ docx (verify 2 nguồn khớp nhau).
+- **C.** Nút "Mic Check" trong panel (`plugin/index.html`) — gọi trực tiếp hàm mới trong `premiereActions.js`, KHÔNG qua WS/MCP/Claude (panel UXP gọi thẳng Premiere Scripting API).
+
+### Quy trình mỗi lần chạy (sau khi setup xong)
+
+1. Chuẩn bị: video nền, ảnh (bao nhiêu cũng được, đặt tên `ảnh N.png` khớp cột "Ảnh N" trong docx), `.srt`, `.docx`.
+2. Chạy `docx_to_json.js` → `cues.json` (lệnh tay, không cần Claude).
+3. Bấm nút **Mic Check** trong panel Premiere.
+4. Panel hiện file picker: chọn video nền, thư mục ảnh, `cues.json`.
+5. Plugin tự động: `create_sequence` (60fps đúng orientation) → `import_files` → đặt video nền → `batch_place_clips` toàn bộ ảnh theo `cues.json` (đã fix bug duration + idempotency, an toàn chạy lại nhiều lần).
+6. Panel báo kết quả + nhắc bước tay còn lại: kéo `.srt` vào caption track (giới hạn UXP thật, không automate được — xem mục "SRT → Native Caption Track" phía dưới).
+7. Kéo SRT vào caption track (tay).
+8. (Tuỳ chọn) Nút "Verify" trong panel — đọc lại toàn bộ clip + caption, so với `cues.json`, báo rõ cái nào lệch — không cần Claude.
+
+### Việc cần làm (thứ tự ưu tiên)
+
+- [ ] `docx_to_json.js` — converter Node.js, có validate ảnh thiếu/thừa
+- [ ] Hàm `runMicCheckWorkflow()` trong `premiereActions.js` — gộp create_sequence+import+đặt video+batch_place_clips thành 1 hàm nhận `cues.json` + đường dẫn media
+- [ ] Nút "Mic Check" + file picker trong `plugin/index.html`/`mcpBridge.js` — gọi thẳng hàm trên, không qua WS
+- [ ] Nút "Verify" trong panel — đối chiếu lại timeline với `cues.json`
+- [ ] Test lại toàn bộ trên đúng bộ file FFWS hiện có, so sánh tốc độ với cách làm tay hôm nay
+
 ## ✅ Bug lớn phát hiện + fix — `durationSeconds` chưa từng được áp dụng trong `insert_clip`/`overwrite_clip`/`batch_place_clips` (2026-09-10)
 
 Phát hiện khi user yêu cầu "cắt đoạn ảnh thừa cho khớp caption": đối chiếu kỹ **end time** (không chỉ start time như trước giờ vẫn verify) của 64 clip ảnh trên sequence FFWS thấy 49/64 clip dài hơn yêu cầu. Root cause: `insertOrOverwriteClip()` (`plugin/premiereActions.js`) nhận tham số `durationSeconds` nhưng **KHÔNG BAO GIỜ áp dụng nó** — chỉ verify/set đúng `startSeconds` qua `createMoveAction`, còn end time luôn giữ nguyên duration mặc định của project item (vd default still-image duration của Premiere, hoặc duration cũ nếu ghi đè lên clip đã có sẵn cùng tên/vị trí). Bug này tồn tại từ lần đầu implement `insert_clip`/`overwrite_clip` (2026-09-09/10) và ảnh hưởng luôn `batch_place_clips` (kế thừa cùng hàm) — chỉ không bị phát hiện vì các lần verify trước giờ chỉ check `finalStartSeconds`, chưa bao giờ check `finalEnd`.
