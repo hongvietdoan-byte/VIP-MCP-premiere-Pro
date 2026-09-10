@@ -1151,12 +1151,13 @@ export const PREMIERE_TOOLS = [
 
   {
     name: 'create_sequence',
-    description: 'Tạo sequence mới trong project đang mở. Có thể tạo rỗng hoặc từ item đang chọn trong Project panel (fromSelectedMedia=true).',
+    description: 'Tạo sequence mới trong project đang mở. Có thể tạo rỗng hoặc từ item đang chọn trong Project panel (fromSelectedMedia=true). Timebase mặc định 60fps.',
     inputSchema: {
       type: 'object',
       properties: {
         name: { type: 'string', description: 'Tên sequence mới.' },
-        fromSelectedMedia: { type: 'boolean', description: 'true = tạo sequence từ (các) item đang chọn trong Project panel. Mặc định false (sequence rỗng).' }
+        fromSelectedMedia: { type: 'boolean', description: 'true = tạo sequence từ (các) item đang chọn trong Project panel. Mặc định false (sequence rỗng).' },
+        timebase: { type: 'number', description: 'Timebase (frame rate) của sequence, đơn vị fps. Mặc định 60.' }
       },
       required: ['name']
     },

@@ -1425,6 +1425,11 @@ function secondsToTick(seconds) {
 }
 
 // Tìm một track item theo khoảng thời gian (dùng cho ripple delete manual)
+// LƯU Ý 2026-09-10: đã sửa dùng getStartTime()/getEndTime() (vị trí thật trên timeline, "relative
+// to sequence start time") thay vì getInPoint()/getOutPoint() (đó là SOURCE TRIM — cùng loại bug
+// đã fix ở insert_clip/overwrite_clip/move_clip trước đó). Bug cũ khiến select_clips_in_range,
+// select_all_clips, và fallback path của ripple_delete/cut_clip_at_time đều xác định sai clip nào
+// nằm trong range.
 async function getTrackItemsInRange(sequence, startTick, endTick, trackType) {
   const items = [];
   const types = trackType === "video" ? ["video"] : trackType === "audio" ? ["audio"] : ["video", "audio"];
@@ -1441,8 +1446,8 @@ async function getTrackItemsInRange(sequence, startTick, endTick, trackType) {
       for (let j = 0; j < trackItemsOnTrack.length; j++) {
         try {
           const item = trackItemsOnTrack[j];
-          const itemStart = await item.getInPoint();
-          const itemEnd = await item.getOutPoint();
+          const itemStart = await item.getStartTime();
+          const itemEnd = await item.getEndTime();
           // Nếu clip nằm trong range [startTick, endTick]
           const sMs = itemStart.seconds;
           const eMs = itemEnd.seconds;
@@ -1499,14 +1504,13 @@ async function getProjectInfo() {
 
   try {
     const rootItem = await project.getRootItem();
-    const childCount = await rootItem.getChildCount();
-    for (let i = 0; i < childCount; i++) {
+    const items = (await rootItem.getItems()) || [];
+    for (const child of items) {
       try {
-        const child = await rootItem.getChildAtIndex(i);
-        const childType = await child.type;
+        const childType = child.type;
         // type 2 = Bin trong UXP
         if (childType === 2 || childType === ppro.Constants.ProjectItemType.BIN) {
-          const binName = await child.getName();
+          const binName = child.name || (await child.getName());
           bins.push({ name: binName });
         }
       } catch {}
@@ -1526,10 +1530,9 @@ async function importFilesToProject({ paths, binName }) {
   if (binName) {
     try {
       const rootItem = await project.getRootItem();
-      const childCount = await rootItem.getChildCount();
-      for (let i = 0; i < childCount; i++) {
-        const child = await rootItem.getChildAtIndex(i);
-        const name = await child.getName();
+      const items = (await rootItem.getItems()) || [];
+      for (const child of items) {
+        const name = child.name || (await child.getName());
         if (name === binName) { targetBin = child; break; }
       }
     } catch {}
@@ -2562,6 +2565,11 @@ async function freezeFrame({ atSeconds }, log) {
 // GROUP 10 — Bin Management
 // ============================================================================
 
+// LƯU Ý 2026-09-10: parent.createBin() KHÔNG tồn tại (đã xác nhận). API đúng theo docs Adobe
+// (FolderItem class): FolderItem.cast(projectItem).createBinAction(name, makeUnique) trả về 1
+// Action, phải chạy qua project.executeTransaction (cùng pattern với duplicateSequence/insertClip).
+// getChildCount/getChildAtIndex cũng sai (cùng loại bug đã fix ở nơi khác trong file này) — đúng
+// phải dùng getItems() trả mảng thẳng.
 async function createBin({ name, parentBin }) {
   if (!name) throw new Error("Phải truyền tên bin.");
   const project = await ppro.Project.getActiveProject();
@@ -2571,21 +2579,46 @@ async function createBin({ name, parentBin }) {
   let parent = rootItem;
 
   if (parentBin) {
-    const childCount = await rootItem.getChildCount();
-    for (let i = 0; i < childCount; i++) {
-      try {
-        const child = await rootItem.getChildAtIndex(i);
-        if ((await child.getName()) === parentBin) { parent = child; break; }
-      } catch {}
+    const items = (await rootItem.getItems()) || [];
+    let found = null;
+    for (const child of items) {
+      try { if ((child.name || (await child.getName())) === parentBin) { found = child; break; } } catch {}
     }
+    if (!found) throw new Error(`Không tìm thấy bin cha "${parentBin}".`);
+    parent = found;
   }
 
-  try {
-    const newBin = await parent.createBin(name);
-    return { created: true, name, binId: newBin ? await newBin.getNodeId() : null };
-  } catch (e) {
-    throw new Error(`Tạo bin "${name}" thất bại: ${e.message}`);
+  const parentFolder = (typeof parent.createBinAction === "function")
+    ? parent
+    : ppro.FolderItem.cast(parent);
+  if (!parentFolder || typeof parentFolder.createBinAction !== "function") {
+    throw new Error("Không lấy được FolderItem hợp lệ (createBinAction không tồn tại) cho parent bin.");
   }
+
+  const beforeItems = (await parent.getItems()) || [];
+  const beforeNames = new Set();
+  for (const it of beforeItems) { try { beforeNames.add(it.name || (await it.getName())); } catch {} }
+
+  let ok;
+  await project.lockedAccess(() => {
+    ok = project.executeTransaction((compoundAction) => {
+      compoundAction.addAction(parentFolder.createBinAction(name, false));
+    }, `Create bin "${name}" qua MCP`);
+  });
+  if (!ok) throw new Error("executeTransaction trả về false khi tạo bin.");
+
+  const afterItems = (await parent.getItems()) || [];
+  let confirmedName = null;
+  for (const it of afterItems) {
+    let n = null;
+    try { n = it.name || (await it.getName()); } catch {}
+    if (n != null && !beforeNames.has(n)) { confirmedName = n; break; }
+  }
+  if (confirmedName == null) {
+    throw new Error("createBinAction() đã chạy nhưng không tìm thấy bin mới trong danh sách sau đó — không xác nhận được có thực sự tạo thành công không.");
+  }
+
+  return { created: true, name: confirmedName };
 }
 
 async function moveItemToBin({ clipName, targetBin }) {
@@ -2596,12 +2629,12 @@ async function moveItemToBin({ clipName, targetBin }) {
   const rootItem = await project.getRootItem();
   let sourceItem = null, targetBinItem = null;
 
-  // Tìm item và bin đích
-  const childCount = await rootItem.getChildCount();
-  for (let i = 0; i < childCount; i++) {
+  // Tìm item và bin đích — dùng getItems() (đúng), không phải getChildCount/getChildAtIndex (sai,
+  // cùng loại bug đã fix ở createBin/importFilesToProject).
+  const items = (await rootItem.getItems()) || [];
+  for (const child of items) {
     try {
-      const child = await rootItem.getChildAtIndex(i);
-      const name = await child.getName();
+      const name = child.name || (await child.getName());
       if (name === clipName && !sourceItem) sourceItem = child;
       if (name === targetBin && !targetBinItem) targetBinItem = child;
     } catch {}
@@ -2610,19 +2643,24 @@ async function moveItemToBin({ clipName, targetBin }) {
   if (!sourceItem) throw new Error(`Không tìm thấy item "${clipName}" trong Project panel.`);
   if (!targetBinItem) throw new Error(`Không tìm thấy bin "${targetBin}" trong Project panel.`);
 
+  // API đúng theo docs Adobe (FolderItem): createMoveItemAction, không phải createMoveBinAction.
   try {
     await project.lockedAccess(() => {
       project.executeTransaction((compoundAction) => {
-        compoundAction.addAction(sourceItem.createMoveBinAction(targetBinItem));
+        compoundAction.addAction(targetBinItem.createMoveItemAction(sourceItem));
       }, `Move "${clipName}" → "${targetBin}"`);
     });
     return { moved: true, clipName, targetBin };
   } catch (e) {
     try {
-      await sourceItem.moveBin(targetBinItem);
+      await project.lockedAccess(() => {
+        project.executeTransaction((compoundAction) => {
+          compoundAction.addAction(sourceItem.createMoveBinAction(targetBinItem));
+        }, `Move "${clipName}" → "${targetBin}" (fallback)`);
+      });
       return { moved: true, clipName, targetBin };
     } catch (e2) {
-      throw new Error(`Move bin thất bại: ${e2.message}`);
+      throw new Error(`Move bin thất bại: ${e.message} / fallback: ${e2.message}`);
     }
   }
 }
@@ -2674,18 +2712,21 @@ async function selectClipsInRange({ startSeconds, endSeconds, trackType = "all" 
 
   if (items.length === 0) return { selected: 0, clips: [] };
 
+  // LƯU Ý 2026-09-10: sequence.createSelectItemsAction KHÔNG tồn tại trong bản Premiere này (đã
+  // live-test — không có trong prototype thật của Sequence, xem seqProto trong get_sequence_info).
+  // API đúng: sequence.setSelection(trackItems) — gọi trực tiếp, KHÔNG qua executeTransaction (đây
+  // không phải action creator). Trước đây lỗi bị nuốt trong try/catch rỗng nên tool báo "selected:N"
+  // dù thực chất không chọn được gì trên UI (get_selected_clips vẫn báo rỗng).
+  let selectError = null;
   try {
-    await project.lockedAccess(() => {
-      project.executeTransaction((compoundAction) => {
-        compoundAction.addAction(sequence.createSelectItemsAction(items.map(i => i.item), true));
-      }, "Chọn clips trong range");
-    });
-  } catch {
-    // API select không chuẩn — fallback: chỉ trả danh sách
+    await sequence.setSelection(items.map(i => i.item));
+  } catch (e) {
+    selectError = String(e && e.message || e);
   }
 
   return {
-    selected: items.length,
+    selected: selectError ? 0 : items.length,
+    selectError,
     clips: items.map(i => ({ trackType: i.trackType, trackIndex: i.trackIndex, startSeconds: i.itemStart.seconds }))
   };
 }
@@ -2696,19 +2737,18 @@ async function selectAllClips({ trackType = "all" }) {
   const sequence = await project.getActiveSequence();
   if (!sequence) throw new Error("Không có sequence active.");
 
-  const duration = await sequence.getEnd();
+  const duration = await sequence.getEndTime();
   const startTick = secondsToTick(0);
   const items = await getTrackItemsInRange(sequence, startTick, duration, trackType);
 
+  let selectError = null;
   try {
-    await project.lockedAccess(() => {
-      project.executeTransaction((compoundAction) => {
-        compoundAction.addAction(sequence.createSelectItemsAction(items.map(i => i.item), true));
-      }, "Chọn tất cả clips");
-    });
-  } catch {}
+    await sequence.setSelection(items.map(i => i.item));
+  } catch (e) {
+    selectError = String(e && e.message || e);
+  }
 
-  return { selected: items.length };
+  return { selected: selectError ? 0 : items.length, selectError };
 }
 
 async function deselectAllClips() {
@@ -2782,6 +2822,11 @@ async function getClipMetadata({ fields }) {
 
   try {
     const projectItem = await clip.getProjectItem();
+    if (typeof projectItem.getXMPMetadata !== "function") {
+      let proto = [];
+      try { proto = Object.getOwnPropertyNames(Object.getPrototypeOf(projectItem)); } catch {}
+      throw new Error(`projectItem.getXMPMetadata không tồn tại trong bản Premiere này. API thật có trên ProjectItem: [${proto.join(", ")}]`);
+    }
     const xmpString = await projectItem.getXMPMetadata();
     // Parse XMP đơn giản — lấy các field phổ biến
     const metadata = {};
@@ -3236,7 +3281,7 @@ async function duplicateClip({ offsetSeconds = 1, videoTrackOffset = 0, audioTra
   };
 }
 
-async function createSequence({ name, fromSelectedMedia = false }) {
+async function createSequence({ name, fromSelectedMedia = false, timebase = 60 }) {
   if (!name) throw new Error("Phải truyền name cho sequence mới.");
   const project = await ppro.Project.getActiveProject();
   if (!project) throw new Error("Không tìm thấy project đang mở.");
@@ -3258,16 +3303,56 @@ async function createSequence({ name, fromSelectedMedia = false }) {
 
   const afterList = (await project.getSequences()) || [];
   let confirmedName = null;
+  let newSequence = null;
   for (const s of afterList) {
     let n = null;
     try { n = s.name || (await s.getName()); } catch {}
-    if (n != null && !beforeNames.has(n)) { confirmedName = n; break; }
+    if (n != null && !beforeNames.has(n)) { confirmedName = n; newSequence = s; break; }
   }
   if (confirmedName == null) {
     throw new Error("createSequence() đã chạy nhưng không tìm thấy sequence mới trong danh sách sau đó — không xác nhận được có thực sự tạo thành công không.");
   }
 
-  return { created: true, name: confirmedName, fromSelectedMedia };
+  // LƯU Ý 2026-09-10: đã live-test kỹ — bản Premiere này KHÔNG có cách nào set frame rate/timebase
+  // qua script:
+  // 1) SequenceSettings không có getVideoFrameRate/setVideoFrameRate (dù docs Adobe online liệt kê
+  //    "since 25.6"). Prototype thật chỉ có: getMaximumBitDepth, setMaxRenderQuality,
+  //    getAudioSampleRate/setAudioSampleRate, getVideoDisplayFormat/setVideoDisplayFormat,
+  //    getVideoFieldType/setVideoFieldType, getVideoFrameRect/setVideoFrameRect (kích thước khung
+  //    hình, KHÔNG phải frame rate), getVideoPixelAspectRatio/setVideoPixelAspectRatio,
+  //    getCompositeInLinearColor, getEditingMode/setEditingMode, getPreview*.
+  // 2) Project.createSequence chỉ nhận (name) — không có overload presetPath, và không có
+  //    createSequenceWithPresetPath nào cả (đã enumerate toàn bộ prototype của Project: chỉ có
+  //    createSequence/createSequenceFromMedia, không có API preset nào khác).
+  // => Timebase/frame rate của sequence mới HOÀN TOÀN nằm ngoài khả năng script ở bản Premiere này.
+  // Vẫn giữ đoạn dò setVideoFrameRate bên dưới phòng khi Adobe bổ sung ở bản Premiere mới hơn, báo
+  // lỗi rõ ràng nếu không có. Workaround thực tế duy nhất: user tự tạo TAY 1 sequence 60fps làm
+  // template 1 lần trong Premiere, sau đó dùng duplicate_sequence(sourceSequenceName=<template>) để
+  // nhân bản (createCloneAction giữ nguyên settings gốc, kể cả timebase) thay vì create_sequence.
+  let timebaseApplied = false;
+  let timebaseError = null;
+  if (timebase && newSequence) {
+    try {
+      const settings = await newSequence.getSettings();
+      if (typeof settings.setVideoFrameRate !== "function") {
+        timebaseError = "SequenceSettings.setVideoFrameRate không tồn tại trong bản Premiere này — chưa có API set timebase trực tiếp. Sequence đã tạo nhưng giữ nguyên timebase mặc định, cần đổi tay trong Premiere (Sequence > Sequence Settings) hoặc dùng preset 60fps khi tạo.";
+      } else {
+        settings.setVideoFrameRate(ppro.FrameRate.createWithValue(timebase));
+        let ok;
+        await project.lockedAccess(() => {
+          ok = project.executeTransaction((compoundAction) => {
+            compoundAction.addAction(newSequence.createSetSettingsAction(settings));
+          }, `Set timebase ${timebase}fps qua MCP`);
+        });
+        timebaseApplied = !!ok;
+        if (!ok) timebaseError = "executeTransaction trả về false khi set timebase.";
+      }
+    } catch (e) {
+      timebaseError = String(e && e.message || e);
+    }
+  }
+
+  return { created: true, name: confirmedName, fromSelectedMedia, timebase, timebaseApplied, timebaseError };
 }
 
 // Helper riêng cho createSequence(fromSelectedMedia) — Project panel selection, không phải timeline selection
