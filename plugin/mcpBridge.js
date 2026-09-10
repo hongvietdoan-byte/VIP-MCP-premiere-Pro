@@ -770,6 +770,7 @@ async function _cmdDebugProbeApi() {
     const p = _ppro.Sequence && _ppro.Sequence.prototype;
     return (p && typeof p.createCaptionTrack === "function") ? "có" : "KHÔNG có";
   });
+
   // LƯU Ý 2026-09-10 (kết luận điều tra SRT→Caption Track, xem TODO.md): đã probe trực tiếp và xác
   // nhận: (1) không có API command/menu execution nào trong module premierepro — loại phương án
   // command automation; (2) SequenceEditor.createInsertProjectItemAction() với SRT ProjectItem
