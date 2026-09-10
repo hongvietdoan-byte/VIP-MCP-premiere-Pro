@@ -772,6 +772,24 @@ async function _cmdDebugProbeApi() {
     return (p && typeof p.createCaptionTrack === "function") ? "có" : "KHÔNG có";
   });
 
+  // TẠM: verify nhanh vài item đầu trên V2 sau run_mic_check_workflow.
+  try {
+    const project = await _ppro.Project.getActiveProject();
+    const sequence = project ? await project.getActiveSequence() : null;
+    if (sequence) {
+      const v2 = await sequence.getVideoTrack(1);
+      const items = await v2.getTrackItems(_ppro.Constants.TrackItemType.CLIP, false);
+      out.quickVerify = { count: items.length, first5: [] };
+      for (const it of items.slice(0, 5)) {
+        const e = {};
+        try { e.name = await it.getName(); } catch {}
+        try { e.start = (await it.getStartTime()).seconds; } catch {}
+        try { e.end = (await it.getEndTime()).seconds; } catch {}
+        out.quickVerify.first5.push(e);
+      }
+    }
+  } catch (e) { out.quickVerify = { error: String(e && e.message || e) }; }
+
 
 
 
