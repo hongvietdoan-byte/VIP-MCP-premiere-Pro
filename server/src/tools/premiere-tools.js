@@ -1151,21 +1151,51 @@ export const PREMIERE_TOOLS = [
 
   {
     name: 'create_sequence',
-    description: 'Tạo sequence mới trong project đang mở. Mặc định (timebase=60) nhân bản từ 1 trong 2 sequence template có sẵn trong project ("Template Youtube 1920x1080 60fps" / "Template Tiktok 1080x1920 60fps") để đảm bảo đúng 60fps thật — Premiere API không có cách set frame rate tuỳ ý qua script. Có thể tạo từ item đang chọn trong Project panel (fromSelectedMedia=true), khi đó bỏ qua template.',
+    description: 'Tạo sequence mới trong project đang mở. Mặc định (timebase=60) tạo sequence trắng rồi set frame rate thật + verify read-back qua API (chỉ khả dụng Premiere Pro 26.2+ — trên bản cũ hơn sequence vẫn được tạo nhưng timebaseApplied sẽ báo false kèm lý do, không set được). Có thể tạo từ item đang chọn trong Project panel (fromSelectedMedia=true), khi đó bỏ qua timebase/frameWidth/frameHeight.',
     inputSchema: {
       type: 'object',
       properties: {
         name: { type: 'string', description: 'Tên sequence mới.' },
-        fromSelectedMedia: { type: 'boolean', description: 'true = tạo sequence từ (các) item đang chọn trong Project panel (bỏ qua template/timebase). Mặc định false.' },
-        timebase: { type: 'number', description: 'Timebase (fps) mong muốn. Mặc định 60 — dùng template để đảm bảo đúng. Giá trị khác 60 sẽ tạo sequence trắng và KHÔNG đảm bảo fps (Premiere API không hỗ trợ set tuỳ ý).' },
-        orientation: { type: 'string', enum: ['landscape', 'portrait'], description: 'Chọn template theo hướng khung hình: "landscape" = 1920x1080 (Youtube), "portrait" = 1080x1920 (Tiktok). Mặc định "landscape". Chỉ áp dụng khi timebase=60.' },
-        frameWidth: { type: 'number', description: 'Đổi lại chiều rộng khung hình sau khi nhân bản template (nếu khác kích thước mặc định của template). Cần truyền kèm frameHeight.' },
-        frameHeight: { type: 'number', description: 'Đổi lại chiều cao khung hình sau khi nhân bản template. Cần truyền kèm frameWidth.' }
+        fromSelectedMedia: { type: 'boolean', description: 'true = tạo sequence từ (các) item đang chọn trong Project panel (bỏ qua timebase/frame size). Mặc định false.' },
+        timebase: { type: 'number', description: 'Frame rate (fps) mong muốn, vd 23.976, 24, 25, 29.97, 30, 50, 59.94, 60. Mặc định 60. Chỉ có tác dụng trên Premiere Pro 26.2+ — kết quả trả về báo rõ timebaseApplied true/false (có verify read-back thật) + actualFps.' },
+        frameWidth: { type: 'number', description: 'Chiều rộng khung hình (px), vd 1920 hoặc 1080. Cần truyền kèm frameHeight.' },
+        frameHeight: { type: 'number', description: 'Chiều cao khung hình (px), vd 1080 hoặc 1920. Cần truyền kèm frameWidth.' }
       },
       required: ['name']
     },
     execute(wsBridge, args) {
       return wsBridge.sendCommand('create_sequence', args, 30000);
+    }
+  },
+
+  {
+    name: 'get_sequence_settings',
+    description: 'Đọc settings thật của 1 sequence qua API (chỉ khả dụng Premiere Pro 26.2+): fps thật, ticksPerFrame, resolution. Dùng để verify sau khi tạo/đổi frame rate, hoặc kiểm tra 1 sequence bất kỳ trong project trước khi tin tưởng nó đúng 60fps.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sequenceName: { type: 'string', description: 'Tên sequence cần đọc. Bỏ trống = sequence đang active.' }
+      },
+      required: []
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('get_sequence_settings', args, 15000);
+    }
+  },
+
+  {
+    name: 'set_sequence_frame_rate',
+    description: 'Đổi frame rate thật của 1 sequence, có verify read-back (đọc lại settings sau khi set, so before/after — nếu Premiere không đổi thật sẽ báo lỗi no-op thay vì thành công giả). Chỉ khả dụng Premiere Pro 26.2+. Hỗ trợ rational fps chuẩn (23.976=24000/1001, 29.97=30000/1001, 59.94=60000/1001) — không dùng so sánh float trực tiếp.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fps: { type: 'number', description: 'Frame rate mong muốn: 23.976, 24, 25, 29.97, 30, 50, 59.94, hoặc 60.' },
+        sequenceName: { type: 'string', description: 'Tên sequence cần đổi. Bỏ trống = sequence đang active.' }
+      },
+      required: ['fps']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_sequence_frame_rate', args, 15000);
     }
   },
 

@@ -202,6 +202,7 @@ function _sendReadyMessage() {
                    // MỚI 2026-09-09 — Timeline placement, sequence mgmt, generic markers, subtitle sync
                    "insert_clip", "overwrite_clip", "duplicate_clip",
                    "create_sequence", "duplicate_sequence", "set_active_sequence",
+                   "get_sequence_settings", "set_sequence_frame_rate",
                    "add_marker", "remove_marker", "update_marker",
                    "generate_and_import_srt", "import_transcript_json"]
   }));
@@ -328,6 +329,10 @@ async function _dispatchCommand(msg) {
       case "duplicate_sequence":     result = await duplicateSequence(params);                    break;
       case "set_active_sequence":    result = await setActiveSequenceTool(params);                break;
 
+      // Group 17c: Sequence Settings / Frame Rate — chỉ hoạt động Premiere Pro 26.2+ (2026-09-10)
+      case "get_sequence_settings":  result = await getSequenceSettings(params);                  break;
+      case "set_sequence_frame_rate": result = await setSequenceFrameRate(params);                break;
+
       // Group 17b: Generic Markers (2026-09-09)
       case "add_marker":             result = await addMarker(params, bLog);                      break;
       case "remove_marker":          result = await removeMarker(params, bLog);                   break;
@@ -377,6 +382,15 @@ async function _cmdGetSequenceInfo() {
       const tbNum = Number(tb);
       if (tbNum > 0) _fpsDebug.timebaseFpsGuess = Math.round((ticksPerSecond / tbNum) * 1000) / 1000;
     } catch (e) { _fpsDebug.tbErr = e.message; }
+    try { _fpsDebug.settingsProto = Object.getOwnPropertyNames(Object.getPrototypeOf(settings)); } catch {}
+    try {
+      if (typeof settings.getVideoFrameRate === "function") {
+        const fr = await settings.getVideoFrameRate();
+        _fpsDebug.getVideoFrameRateValue = fr && fr.value;
+      } else {
+        _fpsDebug.getVideoFrameRateMissing = true;
+      }
+    } catch (e) { _fpsDebug.gvfrErr = e.message; }
     // Probe sequence prototype để tìm method fps
     try { _fpsDebug.seqProto = Object.getOwnPropertyNames(Object.getPrototypeOf(sequence)); } catch {}
   } catch (e) { _fpsDebug.outerErr = e.message; }
