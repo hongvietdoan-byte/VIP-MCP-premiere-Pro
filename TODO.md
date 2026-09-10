@@ -43,6 +43,10 @@ Theo `PLAN_MCP_PREMIERE_SRT_TO_CAPTION_TRACK_DETAILED.docx` (user cung cấp), �
 
 **Quyết định**: dừng ở đây, không tiếp tục Phương án B tự động hoá bằng GUI automation (rủi ro cao, user đã cân nhắc và không chọn) hay xây CEP bridge (việc lớn, chưa cần thiết vì đường kéo tay đã đủ dùng). Có thể tiếp tục hướng MOGRT (mục phía trên) nếu sau này cần tự động hoá text 100%, nhưng không phải ưu tiên hiện tại.
 
+**Ước lượng thời gian nếu sau này muốn thử tiếp** (2026-09-10, chưa làm — ghi lại để tham khảo):
+- **Route D — XML/FCPXML interchange**: ~1-3 giờ cho phần nghiên cứu (export sequence có caption thật → đọc cấu trúc XML → thử sửa tay thêm 2-3 caption → import lại xem có tạo caption track không). Rẻ để thử, biết kết quả nhanh — nếu không work thì dừng ngay, nếu work mới cần thêm vài giờ viết generator SRT→XML.
+- **Route B — GUI automation**: khó ước lượng, rủi ro dead-end cao ngay từ đầu. Cần xây hẳn 1 lớp automation OS-level mới, ngoài kiến trúc UXP/MCP hiện có. Rủi ro lớn nhất: Premiere tự vẽ UI riêng (không dùng control chuẩn Windows) nên UI Automation API của Windows có thể không "thấy" được item trong Project panel/Timeline — cần kiểm tra khả thi trước (~30-60 phút), nếu không khả thi thì dừng ngay; nếu khả thi thì build+test tốn thêm vài giờ vì bản chất GUI automation dễ vỡ khi đổi layout/zoom/focus.
+
 ## ✅ Ưu tiên 1 — `insert_clip` / `overwrite_clip` đặt sai vị trí — ĐÃ FIX, LIVE-TESTED 2026-09-10
 
 Core tool cho use case gốc (đặt ảnh/clip lên timeline theo time range).
