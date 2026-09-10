@@ -5,3 +5,10 @@ Thumbs.db
 source test/
 scripts/node_modules/
 scripts/__pycache__/
+
+# Media test assets (quá lớn cho git — vd clip background.mp4 193MB vượt giới hạn GitHub 100MB)
+Premiere test/file import/*.mp4
+Premiere test/file import/*.mov
+Premiere test/file import/*.mxf
+Premiere test/file import/*.avi
+Premiere test/Adobe Premiere Pro Auto-Save/
