@@ -3443,10 +3443,38 @@ async function insertOrOverwriteClip({ itemName, startSeconds, videoTrackIndex =
     );
   }
 
+  // LƯU Ý 2026-09-10 (bug phát hiện qua verify end time, không phải chỉ start): durationSeconds
+  // TRƯỚC ĐÂY nhận vào nhưng KHÔNG BAO GIỜ được áp dụng — clip luôn giữ duration mặc định của
+  // project item (vd default still-image duration), không phải giá trị user truyền. Bug tồn tại từ
+  // đầu, chỉ lộ ra khi verify kỹ end time (trước giờ chỉ verify start). Set end time thật ở đây.
+  let durationApplied = null;
+  if (durationSeconds != null && durationSeconds > 0) {
+    const endTick = secondsToTick(startSeconds + durationSeconds);
+    let durOk;
+    await project.lockedAccess(() => {
+      durOk = project.executeTransaction((compoundAction) => {
+        movedItems.forEach((item) => { compoundAction.addAction(item.createSetEndAction(endTick)); });
+      }, `${mode === "insert" ? "Insert" : "Overwrite"} "${itemName}" qua MCP (bước 3/3: set duration)`);
+    });
+    durationApplied = !!durOk;
+    if (durOk) {
+      const finalEnd = await movedItems[0].getEndTime();
+      const endDiff = Math.abs(finalEnd.seconds - (startSeconds + durationSeconds));
+      if (endDiff > 0.05) {
+        throw new Error(
+          `Đã set duration nhưng end time cuối cùng (${finalEnd.seconds.toFixed(3)}s) không khớp yêu cầu ` +
+          `(${(startSeconds + durationSeconds).toFixed(3)}s, lệch ${endDiff.toFixed(3)}s). Kiểm tra thủ công.`
+        );
+      }
+    }
+  }
+
   return {
     itemName,
     mode,
     startSeconds,
+    durationSeconds: durationSeconds ?? null,
+    durationApplied,
     videoTrackIndex,
     audioTrackIndex,
     movedItemsCount: movedItems.length,

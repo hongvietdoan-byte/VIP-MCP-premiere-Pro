@@ -2,6 +2,14 @@
 
 Cập nhật lần cuối: 2026-09-10. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
+## ✅ Bug lớn phát hiện + fix — `durationSeconds` chưa từng được áp dụng trong `insert_clip`/`overwrite_clip`/`batch_place_clips` (2026-09-10)
+
+Phát hiện khi user yêu cầu "cắt đoạn ảnh thừa cho khớp caption": đối chiếu kỹ **end time** (không chỉ start time như trước giờ vẫn verify) của 64 clip ảnh trên sequence FFWS thấy 49/64 clip dài hơn yêu cầu. Root cause: `insertOrOverwriteClip()` (`plugin/premiereActions.js`) nhận tham số `durationSeconds` nhưng **KHÔNG BAO GIỜ áp dụng nó** — chỉ verify/set đúng `startSeconds` qua `createMoveAction`, còn end time luôn giữ nguyên duration mặc định của project item (vd default still-image duration của Premiere, hoặc duration cũ nếu ghi đè lên clip đã có sẵn cùng tên/vị trí). Bug này tồn tại từ lần đầu implement `insert_clip`/`overwrite_clip` (2026-09-09/10) và ảnh hưởng luôn `batch_place_clips` (kế thừa cùng hàm) — chỉ không bị phát hiện vì các lần verify trước giờ chỉ check `finalStartSeconds`, chưa bao giờ check `finalEnd`.
+
+**Đã fix**: thêm bước 3/3 trong `insertOrOverwriteClip()` — sau khi move về đúng start, gọi `createSetEndAction` để set đúng end time từ `startSeconds + durationSeconds`, có verify read-back thật (throw nếu lệch >0.05s). Đã live-test: sửa lại 49 clip lệch trên sequence FFWS, toàn bộ khớp đúng ngay sau khi fix (verify bằng `createSetEndAction` trực tiếp qua debug probe trước khi đưa vào code chính thức).
+
+**Cần làm tiếp**: bất kỳ workflow nào TRƯỚC 2026-09-10 dùng `insert_clip`/`overwrite_clip`/`batch_place_clips` với `durationSeconds` (đặc biệt ảnh tĩnh) đều có thể bị sai duration — nên re-verify nếu còn dùng kết quả cũ.
+
 ## ✅ Ưu tiên 0 — Sequence frame rate/timebase — ĐÃ GIẢI QUYẾT, LIVE-TESTED 2026-09-10 (sau khi nâng cấp Premiere 2026)
 
 User yêu cầu: **mọi sequence tạo mới luôn phải là 60fps**. Điều tra 2026-09-10 phát hiện: API duy nhất đọc/set frame rate thật (`SequenceSettings.getVideoFrameRate()`/`setVideoFrameRate()` + `FrameRate.createWithValue()`) chỉ tồn tại từ **Premiere Pro 26.2+** — máy công ty lúc đó chỉ có Premiere 2025 nên hoàn toàn không set/verify được qua script (đã thử cả cách nhân bản template — `createCloneAction` không bảo toàn frame rate, xác nhận không đáng tin).
