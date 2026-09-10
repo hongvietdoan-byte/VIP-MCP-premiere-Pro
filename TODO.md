@@ -2,17 +2,15 @@
 
 Cập nhật lần cuối: 2026-09-10. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md` và `premiere-25-6-4-api-corrections.md`.
 
-## Ưu tiên 1 — `insert_clip` / `overwrite_clip` đặt sai vị trí (CHƯA GIẢI QUYẾT)
+## Ưu tiên 1 — `insert_clip` / `overwrite_clip` đặt sai vị trí (FIX ĐÃ VIẾT, CHƯA LIVE-TEST)
 
-Core tool cho use case gốc (đặt ảnh/clip lên timeline theo time range). Đã xác nhận:
-- `SequenceEditor.createInsertProjectItemAction`/`createOverwriteItemAction` đặt được clip thật (track item count tăng đúng) nhưng **bỏ qua hoàn toàn** tham số vị trí — luôn đặt vào ~1 giờ trừ 1 frame, bất kể input.
-- Đã thử cộng `zeroPoint` vào tick — không tìm được API đọc đúng giá trị zero point thật (`getZeroPoint()`, `getSettings()`, `getInPoint()` đều trả rỗng/vô nghĩa).
-- Đã thử đặt tạm rồi di chuyển bằng `createSetInPointAction` — không có tác dụng.
-- Đã thử set cả In+Out cùng lúc để di chuyển — **CRASH Premiere native** ("A nullptr was dereferenced"). Không thử lại cách này.
+Core tool cho use case gốc (đặt ảnh/clip lên timeline theo time range). Trạng thái 2026-09-10:
+- Root cause đã xác nhận từ trước: `SequenceEditor.createInsertProjectItemAction`/`createOverwriteItemAction` đặt được clip thật nhưng **bỏ qua hoàn toàn** tham số vị trí — luôn đặt vào ~1 giờ trừ 1 frame.
+- Các cách sửa cũ thất bại vì dùng nhầm API: `createSetInPointAction`/`createSetOutPointAction` chỉnh **source trim** (`getInPoint`/`getOutPoint` = "relative to start time of the project item"), không phải vị trí timeline — nên không có tác dụng, và set cả 2 cùng lúc gây crash native.
+- **Đã tìm ra API đúng** qua `@adobe/premierepro` type declarations chính thức: `VideoClipTrackItem`/`AudioClipTrackItem.createMoveAction(tickTime)` — dịch chuyển item theo **offset**, và `getStartTime()`/`getEndTime()` ("relative to the sequence start time") mới là vị trí thật trên timeline.
+- **Đã implement** (`plugin/premiereActions.js`, hàm `insertOrOverwriteClip`): đặt tạm (biết sẽ rơi sai chỗ) → tìm đúng track item mới tạo (khớp tên projectItem + startTime chưa từng thấy trước) → tính offset = vị trí mong muốn − vị trí thật hiện tại → `createMoveAction(offset)` trong transaction riêng. Áp dụng cho cả video lẫn audio track item (clip AV linked) để không bị lệch nhau. Có verify cuối cùng, throw rõ nếu không khớp.
 
-**Hướng thử tiếp theo**: QE DOM (`app.enableQE()`) có sẵn fallback trong codebase cho vài tool khác — thử xem có API insert-tại-vị-trí nào qua đường này không. Hoặc tìm đúng API "di chuyển vị trí track item trên timeline" (khác với `createSetInPointAction`, có vẻ chỉ ảnh hưởng source trim chứ không phải vị trí timeline).
-
-Hiện tại tool này throw lỗi rõ ràng ngay đầu hàm, không tạo thêm clip rác nữa.
+**CHƯA XÁC NHẬN CHẠY THẬT** — cần: reload plugin trong UXP Developer Tool (Watch), gọi `insert_clip`/`overwrite_clip` thật qua WS, kiểm tra vị trí clip trên timeline đúng bằng mắt + `get_sequence_info`. Nếu lỗi, xem log Debug console. Không được kết luận "đã fix" cho tới khi có bằng chứng chạy thật (theo nguyên tắc premiere-capability-tester).
 
 ## Ưu tiên 2 — Vài lỗi tên API đã xác nhận, chưa sửa
 
@@ -20,7 +18,7 @@ Hiện tại tool này throw lỗi rõ ràng ngay đầu hàm, không tạo thê
 - `select_all_clips` — `sequence.getEnd is not a function`. Chưa tìm ra tên đúng.
 - `get_clip_metadata` — `projectItem.getXMPMetadata is not a function`.
 - `move_item_to_bin`, `get_project_info`'s bins list — nghi dùng chung pattern `getChildCount`/`getChildAtIndex` đã biết sai (đúng phải là `getItems()`), chưa fix.
-- `move_clip` — dùng `createSetStartTimeAction`, đã xác nhận **không tồn tại** (phát hiện khi debug insert_clip). Cần sửa + test lại.
+- `move_clip` — dùng `createSetStartTimeAction`, đã xác nhận **không tồn tại** (phát hiện khi debug insert_clip). **Đã sửa 2026-09-10** sang `createMoveAction(offset)` (cùng API/pattern vừa fix cho `insert_clip`/`overwrite_clip`) — CHƯA LIVE-TEST.
 
 ## Ưu tiên 3 — Test theo đợt ~45 tool còn lại
 

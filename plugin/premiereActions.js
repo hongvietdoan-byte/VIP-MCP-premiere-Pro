@@ -1720,19 +1720,36 @@ async function rippleDelete({ startSeconds, endSeconds }) {
 }
 
 async function moveClip({ startSeconds, trackIndex }) {
+  // Sửa 2026-09-10 (CHƯA LIVE-TEST): `createSetStartTimeAction` không tồn tại trên track item (phát
+  // hiện khi debug insert_clip — xem [[premiere-25-6-4-api-corrections]]). API đúng để di chuyển vị
+  // trí trên timeline là `createMoveAction(tickTime)` — dịch chuyển theo OFFSET so với vị trí hiện
+  // tại (`getStartTime()`, "relative to sequence start time"), không phải toạ độ tuyệt đối và không
+  // phải `getInPoint()` (đó là source trim). Cùng pattern đã dùng cho insertOrOverwriteClip.
   if (startSeconds == null) throw new Error("Phải truyền startSeconds.");
   const { project, sequence, clip } = await getActiveSequenceAndSelection(function () {});
 
+  const currentStart = await clip.getStartTime();
+  const desiredTick = secondsToTick(startSeconds);
+  const offset = desiredTick.subtract(currentStart);
+
+  let ok;
   await project.lockedAccess(() => {
-    project.executeTransaction((compoundAction) => {
-      const newTick = secondsToTick(startSeconds);
-      compoundAction.addAction(clip.createSetStartTimeAction(newTick));
+    ok = project.executeTransaction((compoundAction) => {
+      compoundAction.addAction(clip.createMoveAction(offset));
     }, "Move clip qua MCP");
   });
+  if (!ok) throw new Error("executeTransaction trả về false khi di chuyển clip.");
 
-  let newStart = null;
-  try { newStart = (await clip.getInPoint()).seconds; } catch {}
-  return { moved: true, newStartSeconds: newStart ?? startSeconds };
+  const finalStart = await clip.getStartTime();
+  const diffSeconds = Math.abs(finalStart.seconds - startSeconds);
+  if (diffSeconds > 0.05) {
+    throw new Error(
+      `Đã di chuyển clip nhưng vị trí cuối cùng (${finalStart.seconds.toFixed(3)}s) không khớp startSeconds ` +
+      `yêu cầu (${startSeconds}s, lệch ${diffSeconds.toFixed(3)}s).`
+    );
+  }
+
+  return { moved: true, newStartSeconds: finalStart.seconds };
 }
 
 // ============================================================================
@@ -3027,33 +3044,148 @@ async function countAllTrackItems(sequence) {
   return total;
 }
 
+// Tìm track item MỚI (vừa được insert/overwrite thêm vào) trên 1 track, khớp theo tên projectItem
+// và KHÔNG có mặt trong tập "signature" chụp trước đó. Signature = getStartTime().seconds (vị trí
+// trên timeline, KHÁC với getInPoint()/getOutPoint() — 2 cái đó là source trim, không phải vị trí).
+async function collectStartTimeSignatures(track, itemName) {
+  const set = new Set();
+  if (!track) return set;
+  let items;
+  try { items = await track.getTrackItems(ppro.Constants.TrackItemType.CLIP, false); } catch { return set; }
+  for (const item of items) {
+    let projItem;
+    try { projItem = await item.getProjectItem(); } catch { continue; }
+    let name;
+    try { name = projItem && projItem.name; } catch { continue; }
+    if (name !== itemName) continue;
+    try {
+      const start = await item.getStartTime();
+      set.add(start.seconds.toFixed(6));
+    } catch {}
+  }
+  return set;
+}
+
+async function findNewMatchingTrackItem(track, itemName, beforeSignatures) {
+  if (!track) return null;
+  let items;
+  try { items = await track.getTrackItems(ppro.Constants.TrackItemType.CLIP, false); } catch { return null; }
+  for (const item of items) {
+    let projItem;
+    try { projItem = await item.getProjectItem(); } catch { continue; }
+    let name;
+    try { name = projItem && projItem.name; } catch { continue; }
+    if (name !== itemName) continue;
+    let start;
+    try { start = await item.getStartTime(); } catch { continue; }
+    if (!beforeSignatures.has(start.seconds.toFixed(6))) return item;
+  }
+  return null;
+}
+
 async function insertOrOverwriteClip({ itemName, startSeconds, videoTrackIndex = 0, audioTrackIndex = 0, durationSeconds, mode }, log) {
-  // CHƯA GIẢI QUYẾT ĐƯỢC — xem [[premiere-25-6-4-api-corrections]] / [[premiere-mcp]] memory,
-  // mục insert_clip, cập nhật 2026-09-10.
+  // Bối cảnh bug (xem thêm [[premiere-25-6-4-api-corrections]] / [[premiere-mcp]] memory, mục
+  // insert_clip, cập nhật 2026-09-10): SequenceEditor.createInsertProjectItemAction/
+  // createOverwriteItemAction đặt được clip thật nhưng BỎ QUA tham số TickTime vị trí — clip luôn
+  // rơi vào 1 vị trí cố định. Các cách sửa cũ thất bại vì dùng nhầm API: createSetInPointAction/
+  // createSetOutPointAction chỉnh SOURCE TRIM (getInPoint/getOutPoint = "relative to start time of
+  // the project item"), KHÔNG phải vị trí trên timeline — nên "di chuyển" không có tác dụng, và set
+  // cả 2 cùng lúc (đổi cả trim lẫn duration) gây crash native.
   //
-  // Đã xác nhận: SequenceEditor.createInsertProjectItemAction/createOverwriteItemAction ĐẶT ĐƯỢC
-  // clip thật (track item count tăng đúng 1 mỗi lần gọi) nhưng BỎ QUA HOÀN TOÀN tham số TickTime
-  // truyền vào — clip luôn bị "kẹp" vào đúng 1 vị trí cố định (~1 giờ trừ 1 frame, tái hiện y hệt
-  // trên cả sequence 23.976fps lẫn 60fps, chứng tỏ đây là hằng số nội bộ chứ không phải lỗi tính
-  // toán phía mình — đã verify tick truyền vào luôn đúng 100% qua log chẩn đoán trực tiếp).
-  //
-  // Đã thử và đều thất bại:
-  //  1. Cộng sequence.getZeroPoint()/getSettings()/getInPoint() vào tick trước khi truyền — cả 3
-  //     API đều trả về dữ liệu rỗng ({}) hoặc vô nghĩa (getInPoint trả -400000s, rõ ràng là giá trị
-  //     sentinel "chưa set", không phải zero point thật).
-  //  2. Đặt tạm rồi di chuyển lại bằng createSetInPointAction() riêng lẻ — không có tác dụng gì,
-  //     clip vẫn nằm nguyên ở vị trí cũ sau khi gọi.
-  //  3. Set cả InPoint + OutPoint cùng lúc trong 1 transaction để di chuyển — làm Premiere
-  //     CRASH NATIVE ("A nullptr was dereferenced"). KHÔNG được thử lại cách này.
-  //
-  // Throw ngay từ đầu (TRƯỚC khi chèn gì) để không tiếp tục tạo thêm clip rác ở vị trí sai trên
-  // timeline mỗi lần tool này được gọi, cho tới khi tìm được hướng khắc phục an toàn khác.
-  throw new Error(
-    `insert_clip/overwrite_clip hiện KHÔNG dùng được: đã xác nhận Premiere 25.6.4 luôn đặt clip vào ` +
-    `1 vị trí cố định (~1 giờ trên timeline) bất kể startSeconds truyền vào, và các cách khắc phục đã ` +
-    `thử đều thất bại (1 cách còn gây crash Premiere, không thử lại). Cần nghiên cứu thêm ở phiên sau ` +
-    `— xem memory "premiere-25-6-4-api-corrections" mục insert_clip để biết chi tiết đã thử.`
-  );
+  // Fix 2026-09-10 (CHƯA LIVE-TEST — cần chạy premiere-capability-tester hoặc test tay trước khi
+  // tin tưởng): dùng đúng API dành riêng cho VỊ TRÍ timeline, lấy từ @adobe/premierepro type decl
+  // chính thức — VideoClipTrackItem/AudioClipTrackItem.createMoveAction(tickTime), trong đó
+  // getStartTime()/getEndTime() ("relative to the sequence start time") mới là vị trí thật, và
+  // createMoveAction dịch chuyển item theo OFFSET (không phải toạ độ tuyệt đối). Quy trình 2 bước:
+  //   1. Insert/overwrite bình thường (biết trước sẽ rơi vào vị trí cố định sai).
+  //   2. Tìm đúng track item vừa tạo (khớp tên projectItem + startTime chưa từng thấy trước đó),
+  //      tính offset = desiredTick - currentStartTick, gọi createMoveAction(offset) để đưa về đúng
+  //      startSeconds yêu cầu. Áp dụng cho cả video track item lẫn audio track item (clip AV linked)
+  //      để 2 bên không bị lệch nhau.
+  if (!itemName) throw new Error("Phải truyền itemName (tên item trong Project panel, kể cả trong bin con).");
+  if (startSeconds == null) throw new Error("Phải truyền startSeconds.");
+
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  const projectItem = await findProjectItemByName(project, itemName);
+  if (!projectItem) throw new Error(`Không tìm thấy item "${itemName}" trong Project panel (đã tìm cả trong bin con).`);
+
+  const sequenceEditor = ppro.SequenceEditor.getEditor(sequence);
+  if (!sequenceEditor) throw new Error("Không lấy được SequenceEditor cho sequence hiện tại — API có thể không khả dụng trong bản Premiere này.");
+
+  const videoTrack = await sequence.getVideoTrack(videoTrackIndex).catch(() => null);
+  const audioTrack = await sequence.getAudioTrack(audioTrackIndex).catch(() => null);
+
+  const beforeVideoSigs = await collectStartTimeSignatures(videoTrack, itemName);
+  const beforeAudioSigs = await collectStartTimeSignatures(audioTrack, itemName);
+
+  const placeholderTick = secondsToTick(startSeconds);
+
+  let placedOk;
+  await project.lockedAccess(() => {
+    placedOk = project.executeTransaction((compoundAction) => {
+      const action = mode === "insert"
+        ? sequenceEditor.createInsertProjectItemAction(projectItem, placeholderTick, videoTrackIndex, audioTrackIndex, true)
+        : sequenceEditor.createOverwriteItemAction(projectItem, placeholderTick, videoTrackIndex, audioTrackIndex);
+      compoundAction.addAction(action);
+    }, `${mode === "insert" ? "Insert" : "Overwrite"} "${itemName}" qua MCP (bước 1/2: đặt tạm)`);
+  });
+  if (!placedOk) throw new Error("executeTransaction trả về false khi đặt clip lên timeline.");
+
+  const newVideoItem = await findNewMatchingTrackItem(videoTrack, itemName, beforeVideoSigs);
+  const newAudioItem = await findNewMatchingTrackItem(audioTrack, itemName, beforeAudioSigs);
+  const movedItems = [newVideoItem, newAudioItem].filter(Boolean);
+
+  if (movedItems.length === 0) {
+    throw new Error(
+      `Đã đặt "${itemName}" lên timeline nhưng KHÔNG xác định được track item mới để di chuyển về đúng vị trí ` +
+      `(startSeconds=${startSeconds}). Clip có thể đang nằm sai chỗ trên timeline (gần mốc 1 giờ) — kiểm tra và ` +
+      `xoá thủ công nếu cần.`
+    );
+  }
+
+  const desiredTick = secondsToTick(startSeconds);
+  const currentStarts = [];
+  for (const item of movedItems) currentStarts.push(await item.getStartTime());
+  const offsets = currentStarts.map((cur) => desiredTick.subtract(cur));
+
+  let movedOk;
+  await project.lockedAccess(() => {
+    movedOk = project.executeTransaction((compoundAction) => {
+      movedItems.forEach((item, i) => {
+        compoundAction.addAction(item.createMoveAction(offsets[i]));
+      });
+    }, `${mode === "insert" ? "Insert" : "Overwrite"} "${itemName}" qua MCP (bước 2/2: di chuyển về đúng vị trí)`);
+  });
+  if (!movedOk) {
+    throw new Error(
+      `Đã đặt "${itemName}" lên timeline nhưng createMoveAction trả về false khi di chuyển về ` +
+      `startSeconds=${startSeconds}. Clip hiện đang ở vị trí sai (gần mốc 1 giờ) — kiểm tra thủ công.`
+    );
+  }
+
+  const finalStart = await movedItems[0].getStartTime();
+  const diffSeconds = Math.abs(finalStart.seconds - startSeconds);
+  if (diffSeconds > 0.05) {
+    throw new Error(
+      `Đã di chuyển clip nhưng vị trí cuối cùng (${finalStart.seconds.toFixed(3)}s) không khớp startSeconds ` +
+      `yêu cầu (${startSeconds}s, lệch ${diffSeconds.toFixed(3)}s). Kiểm tra thủ công trên timeline.`
+    );
+  }
+
+  return {
+    itemName,
+    mode,
+    startSeconds,
+    videoTrackIndex,
+    audioTrackIndex,
+    movedItemsCount: movedItems.length,
+    finalStartSeconds: finalStart.seconds,
+    note: "Đặt clip qua bug vị trí cố định của Premiere rồi tự động di chuyển về đúng startSeconds bằng createMoveAction (2 bước, 2 transaction riêng)."
+  };
 }
 
 async function insertClip(params, log) {
