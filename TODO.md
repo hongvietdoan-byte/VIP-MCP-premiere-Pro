@@ -20,28 +20,30 @@ User yêu cầu tối ưu workflow FFWS (video nền + ảnh theo caption + SRT)
 ### Kiến trúc đã chốt
 
 **Setup 1 lần** (không lặp lại mỗi video):
-- **A.** `docx_to_json.js` (Node.js, chạy NGOÀI Premiere) — đọc file `.docx` (bảng Time Stamp/Player/EN/Ảnh), xuất `cues.json`: `{"cues":[{"start":0.2,"end":1.333,"text":"...","image":"ảnh 1.png"},...]}`. **Bắt buộc có bước validate**: quét mọi giá trị cột Ảnh xuất hiện trong docx, đối chiếu với file thật trong thư mục ảnh — báo lỗi rõ ràng nếu thiếu file (không chặn nếu thư mục có ảnh thừa không dùng tới). Số lượng ảnh KHÔNG hardcode — tự co giãn theo dữ liệu thật (3 ảnh, 5 ảnh đều chạy được, không cần sửa code).
-- **B.** `srt_to_json.js` hoặc gộp chung — parse `.srt` ra cùng cấu trúc cue, dùng đối chiếu chéo với JSON từ docx (verify 2 nguồn khớp nhau).
-- **C.** Nút "Mic Check" trong panel (`plugin/index.html`) — gọi trực tiếp hàm mới trong `premiereActions.js`, KHÔNG qua WS/MCP/Claude (panel UXP gọi thẳng Premiere Scripting API).
+- **A. (bản Node, đã xong)** `scripts/docx_to_json.js` — đọc `.docx`, xuất CHỈ `cues.json`. Vẫn cần `.srt` chuẩn bị riêng.
+- **A2. (bản Python, đã xong, KHUYẾN NGHỊ dùng bản này)** `scripts/docx_to_mic_check.py` — đọc `.docx` bằng `python-docx` (đọc qua Table API thật, bền hơn regex XML của bản Node — tìm header theo NỘI DUNG cell "Time Stamp"/"Player"/"EN"/"Ảnh", không hardcode vị trí dòng), xuất **CẢ 2 FILE cùng lúc** từ cùng 1 nguồn: `<tên>.cues.json` VÀ `<tên>.srt` — đảm bảo 2 file luôn khớp nhau tuyệt đối, **không cần chuẩn bị `.srt` riêng nữa**. Có validate ảnh thiếu/thừa giống bản Node. Live-tested: SRT xuất ra khớp byte-cho-byte 100% với file SRT gốc đã dùng cả buổi (`cmp` xác nhận identical). Cần cài: `pip install python-docx` (đã cài trên máy này qua `py -m pip install python-docx`).
+- **B. (KHÔNG CẦN NỮA nếu dùng A2)** `srt_to_json.js` đối chiếu chéo — bỏ vì A2 sinh cả 2 file từ 1 nguồn, không còn nguy cơ lệch.
+- **C.** Nút "Mic Check" trong panel (`plugin/index.html`) — gọi trực tiếp hàm mới trong `premiereActions.js`, KHÔNG qua WS/MCP/Claude (panel UXP gọi thẳng Premiere Scripting API). **Chưa làm.**
 
 ### Quy trình mỗi lần chạy (sau khi setup xong)
 
-1. Chuẩn bị: video nền, ảnh (bao nhiêu cũng được, đặt tên `ảnh N.png` khớp cột "Ảnh N" trong docx), `.srt`, `.docx`.
-2. Chạy `docx_to_json.js` → `cues.json` (lệnh tay, không cần Claude).
-3. Bấm nút **Mic Check** trong panel Premiere.
+1. Chuẩn bị: video nền, ảnh (bao nhiêu cũng được, đặt tên `ảnh N.png` khớp cột "Ảnh N" trong docx), `.docx` (KHÔNG cần `.srt` riêng nữa nếu dùng `docx_to_mic_check.py`).
+2. Chạy `python scripts/docx_to_mic_check.py --docx <file.docx> --images <thư mục ảnh> --out-dir <thư mục xuất>` → ra cả `cues.json` và `.srt` (lệnh tay, không cần Claude).
+3. Bấm nút **Mic Check** trong panel Premiere. *(nút này CHƯA làm — hiện tại bước 3-6 vẫn phải gọi qua tool `run_mic_check_workflow` qua Claude/MCP.)*
 4. Panel hiện file picker: chọn video nền, thư mục ảnh, `cues.json`.
-5. Plugin tự động: `create_sequence` (60fps đúng orientation) → `import_files` → đặt video nền → `batch_place_clips` toàn bộ ảnh theo `cues.json` (đã fix bug duration + idempotency, an toàn chạy lại nhiều lần).
+5. Plugin tự động: `create_sequence` (60fps đúng orientation) → `import_files` → đặt video nền → `batch_place_clips` toàn bộ ảnh theo `cues.json` (đã fix bug duration + idempotency + delay chống crash, an toàn chạy lại nhiều lần) — **đã live-test qua `run_mic_check_workflow`, hoạt động đúng, không crash.**
 6. Panel báo kết quả + nhắc bước tay còn lại: kéo `.srt` vào caption track (giới hạn UXP thật, không automate được — xem mục "SRT → Native Caption Track" phía dưới).
 7. Kéo SRT vào caption track (tay).
 8. (Tuỳ chọn) Nút "Verify" trong panel — đọc lại toàn bộ clip + caption, so với `cues.json`, báo rõ cái nào lệch — không cần Claude.
 
 ### Việc cần làm (thứ tự ưu tiên)
 
-- [ ] `docx_to_json.js` — converter Node.js, có validate ảnh thiếu/thừa
-- [ ] Hàm `runMicCheckWorkflow()` trong `premiereActions.js` — gộp create_sequence+import+đặt video+batch_place_clips thành 1 hàm nhận `cues.json` + đường dẫn media
-- [ ] Nút "Mic Check" + file picker trong `plugin/index.html`/`mcpBridge.js` — gọi thẳng hàm trên, không qua WS
+- [x] `scripts/docx_to_json.js` — converter Node.js, có validate ảnh thiếu/thừa (bản cũ, vẫn giữ nhưng không còn là đường chính)
+- [x] `scripts/docx_to_mic_check.py` — converter Python, xuất cả cues.json + srt cùng lúc, live-tested khớp byte-cho-byte với SRT gốc — **đường chính hiện tại**
+- [x] Hàm `runMicCheckWorkflow()` trong `premiereActions.js` + tool MCP `run_mic_check_workflow` — đã live-test 2 lần thành công (64 ảnh, không crash sau khi thêm delay)
+- [ ] Nút "Mic Check" + file picker trong `plugin/index.html`/`mcpBridge.js` — gọi thẳng hàm trên, không qua WS — **CHƯA LÀM, việc tiếp theo**
 - [ ] Nút "Verify" trong panel — đối chiếu lại timeline với `cues.json`
-- [ ] Test lại toàn bộ trên đúng bộ file FFWS hiện có, so sánh tốc độ với cách làm tay hôm nay
+- [x] Test lại toàn bộ trên đúng bộ file FFWS hiện có — xong, kết quả đúng
 
 ## ✅ Bug lớn phát hiện + fix — `durationSeconds` chưa từng được áp dụng trong `insert_clip`/`overwrite_clip`/`batch_place_clips` (2026-09-10)
 
