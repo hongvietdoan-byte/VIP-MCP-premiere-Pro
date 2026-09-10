@@ -2643,26 +2643,38 @@ async function moveItemToBin({ clipName, targetBin }) {
   if (!sourceItem) throw new Error(`Không tìm thấy item "${clipName}" trong Project panel.`);
   if (!targetBinItem) throw new Error(`Không tìm thấy bin "${targetBin}" trong Project panel.`);
 
-  // API đúng theo docs Adobe (FolderItem): createMoveItemAction, không phải createMoveBinAction.
-  try {
-    await project.lockedAccess(() => {
-      project.executeTransaction((compoundAction) => {
-        compoundAction.addAction(targetBinItem.createMoveItemAction(sourceItem));
-      }, `Move "${clipName}" → "${targetBin}"`);
-    });
-    return { moved: true, clipName, targetBin };
-  } catch (e) {
-    try {
-      await project.lockedAccess(() => {
-        project.executeTransaction((compoundAction) => {
-          compoundAction.addAction(sourceItem.createMoveBinAction(targetBinItem));
-        }, `Move "${clipName}" → "${targetBin}" (fallback)`);
-      });
-      return { moved: true, clipName, targetBin };
-    } catch (e2) {
-      throw new Error(`Move bin thất bại: ${e.message} / fallback: ${e2.message}`);
-    }
+  // LƯU Ý 2026-09-10: createMoveItemAction CÓ THẬT trên FolderItem.prototype (đã xác nhận live) —
+  // lỗi trước là do targetBinItem lấy từ rootItem.getItems() là ProjectItem chung, chưa cast sang
+  // FolderItem nên không thấy method (cùng bug pattern đã fix ở createBin).
+  const targetFolder = (typeof targetBinItem.createMoveItemAction === "function")
+    ? targetBinItem
+    : ppro.FolderItem.cast(targetBinItem);
+  if (!targetFolder || typeof targetFolder.createMoveItemAction !== "function") {
+    throw new Error(`Không cast được "${targetBin}" thành FolderItem hợp lệ (createMoveItemAction không tồn tại).`);
   }
+
+  // LƯU Ý 2026-09-10: createMoveItemAction tồn tại thật trên FolderItem.prototype nhưng gọi với
+  // (item) hay ([item], bool) đều báo "Not Enough Parameters" từ native layer — chưa tìm ra chữ ký
+  // đúng (length báo 0, không đáng tin với hàm native). CHƯA GIẢI QUYẾT — xem TODO.md.
+  let ok;
+  await project.lockedAccess(() => {
+    ok = project.executeTransaction((compoundAction) => {
+      compoundAction.addAction(targetFolder.createMoveItemAction(sourceItem));
+    }, `Move "${clipName}" → "${targetBin}" qua MCP`);
+  });
+  if (!ok) throw new Error("executeTransaction trả về false khi di chuyển item.");
+
+  // Verify read-back: item còn thấy được trong bin đích không.
+  const afterItems = (await targetFolder.getItems()) || [];
+  let found = false;
+  for (const it of afterItems) {
+    try { if ((it.name || (await it.getName())) === clipName) { found = true; break; } } catch {}
+  }
+  if (!found) {
+    throw new Error(`createMoveItemAction() chạy xong nhưng không thấy "${clipName}" trong bin "${targetBin}" — không xác nhận được di chuyển thành công.`);
+  }
+
+  return { moved: true, clipName, targetBin };
 }
 
 async function replaceClipMedia({ newFilePath }, log) {
