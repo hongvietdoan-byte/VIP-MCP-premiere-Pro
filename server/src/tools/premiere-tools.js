@@ -1169,6 +1169,21 @@ export const PREMIERE_TOOLS = [
   },
 
   {
+    name: 'delete_sequence',
+    description: 'Xoá 1 sequence khỏi project theo tên. Có verify read-back (kiểm tra sequence không còn trong danh sách sau khi xoá). Không thể hoàn tác qua MCP — cân nhắc trước khi gọi.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Tên sequence cần xoá.' }
+      },
+      required: ['name']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('delete_sequence', args, 15000);
+    }
+  },
+
+  {
     name: 'insert_mogrt_caption',
     description: 'Chèn 1 file .mogrt lên timeline tại đúng vị trí/thời lượng chỉ định + set text (component AE.ADBE Text, param "Source Text"), có verify read-back thật (vị trí + text). Dùng cho 1 caption đơn lẻ — với nhiều caption từ file SRT, dùng srt_to_mogrt_captions (1 lệnh xử lý cả file, hiệu quả hơn nhiều so với gọi tool này lặp lại).',
     inputSchema: {

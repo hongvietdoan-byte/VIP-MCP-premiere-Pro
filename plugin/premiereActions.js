@@ -3705,6 +3705,37 @@ async function setActiveSequenceTool({ name }) {
   return { activated: true, name };
 }
 
+// project.deleteSequence tồn tại thật (xác nhận qua enumerate Project.prototype khi debug
+// create_sequence, 2026-09-10). Chưa live-test trước đây — test lần đầu ở đây.
+async function deleteSequenceTool({ name }) {
+  if (!name) throw new Error("Phải truyền name của sequence cần xoá.");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+
+  const all = (await project.getSequences()) || [];
+  let target = null;
+  for (const s of all) {
+    try { if ((s.name || (await s.getName())) === name) { target = s; break; } } catch {}
+  }
+  if (!target) throw new Error(`Không tìm thấy sequence "${name}" trong project.`);
+  if (typeof project.deleteSequence !== "function") {
+    throw new Error("project.deleteSequence không tồn tại trong bản Premiere này.");
+  }
+
+  await project.deleteSequence(target);
+
+  const after = (await project.getSequences()) || [];
+  let stillExists = false;
+  for (const s of after) {
+    try { if ((s.name || (await s.getName())) === name) { stillExists = true; break; } } catch {}
+  }
+  if (stillExists) {
+    throw new Error(`deleteSequence() chạy xong nhưng "${name}" vẫn còn trong danh sách sequence — không xác nhận được xoá thành công.`);
+  }
+
+  return { deleted: true, name };
+}
+
 // ============================================================================
 // GROUP — Sequence Settings / Frame Rate (chỉ hoạt động từ Premiere Pro 26.2+ —
 // SequenceSettings.getVideoFrameRate/setVideoFrameRate không tồn tại ở bản cũ hơn, xem

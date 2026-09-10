@@ -201,7 +201,7 @@ function _sendReadyMessage() {
                    "transcribe_clip", "auto_caption_from_speech",
                    // MỚI 2026-09-09 — Timeline placement, sequence mgmt, generic markers, subtitle sync
                    "insert_clip", "overwrite_clip", "duplicate_clip",
-                   "create_sequence", "duplicate_sequence", "set_active_sequence",
+                   "create_sequence", "duplicate_sequence", "set_active_sequence", "delete_sequence",
                    "get_sequence_settings", "set_sequence_frame_rate",
                    "insert_mogrt_caption", "srt_to_mogrt_captions",
                    "add_marker", "remove_marker", "update_marker",
@@ -329,6 +329,7 @@ async function _dispatchCommand(msg) {
       case "create_sequence":        result = await createSequence(params);                       break;
       case "duplicate_sequence":     result = await duplicateSequence(params);                    break;
       case "set_active_sequence":    result = await setActiveSequenceTool(params);                break;
+      case "delete_sequence":        result = await deleteSequenceTool(params);                   break;
 
       // Group 17c: Sequence Settings / Frame Rate — chỉ hoạt động Premiere Pro 26.2+ (2026-09-10)
       case "get_sequence_settings":  result = await getSequenceSettings(params);                  break;
@@ -758,44 +759,15 @@ async function _cmdDebugProbeApi() {
     return (p && typeof p.createKeyframe === "function") ? "có" : "KHÔNG có";
   });
 
-  // --- Capability probe cho SRT→timeline (PLAN_MCP_PREMIERE_SRT_TO_TEXT_TIMELINE.docx, 2026-09-10) ---
+  // --- Capability flags cho SRT→timeline (PLAN_MCP_PREMIERE_SRT_TO_*.docx, 2026-09-10) — giữ lại
+  // dạng cờ ngắn gọn cho tool general-purpose này, chi tiết đầy đủ xem TODO.md/memory ---
   probe("SequenceEditor.insertMogrtFromPath", () => {
     const p = _ppro.SequenceEditor && _ppro.SequenceEditor.prototype;
     return (p && typeof p.insertMogrtFromPath === "function") ? "có" : "KHÔNG có";
   });
-  probe("SequenceEditor.insertMogrtFromLibrary", () => {
-    const p = _ppro.SequenceEditor && _ppro.SequenceEditor.prototype;
-    return (p && typeof p.insertMogrtFromLibrary === "function") ? "có" : "KHÔNG có";
-  });
-  probe("SequenceEditor full prototype (chứa từ 'insert'/'caption'/'mogrt'/'text')", () => {
-    const p = _ppro.SequenceEditor && _ppro.SequenceEditor.prototype;
-    if (!p) return "SequenceEditor không tồn tại";
-    return Object.getOwnPropertyNames(p).filter(n =>
-      /insert|caption|mogrt|text|graphic/i.test(n));
-  });
-  probe("SequenceEditor.insertMogrtFromPath.length (số tham số)", () => {
-    const p = _ppro.SequenceEditor && _ppro.SequenceEditor.prototype;
-    return p && typeof p.insertMogrtFromPath === "function" ? p.insertMogrtFromPath.length : "n/a";
-  });
-  probe("VideoClipTrackItem/TrackItem: từ 'component'/'graphic'/'mogrt'/'text' trong prototype", () => {
-    const out2 = {};
-    for (const cls of ["VideoClipTrackItem", "TrackItem", "GraphicClipTrackItem", "ClipTrackItem"]) {
-      const p = _ppro[cls] && _ppro[cls].prototype;
-      if (p) out2[cls] = Object.getOwnPropertyNames(p).filter(n => /component|graphic|mogrt|text/i.test(n));
-    }
-    return out2;
-  });
-  probe("_ppro top-level: từ 'Graphic'/'Mogrt'/'Motion'/'Essential' trong tên class", () => {
-    return Object.getOwnPropertyNames(_ppro).filter(n => /graphic|mogrt|motion|essential/i.test(n));
-  });
-  probe("CaptionTrack class tồn tại + prototype", () => {
-    const ct = _ppro.CaptionTrack;
-    if (!ct) return "_ppro.CaptionTrack KHÔNG tồn tại ở top-level";
-    return Object.getOwnPropertyNames(ct.prototype || {});
-  });
-  probe("Track (chung video/audio) full prototype", () => {
-    const p = _ppro.Track && _ppro.Track.prototype;
-    return p ? Object.getOwnPropertyNames(p) : "_ppro.Track KHÔNG tồn tại";
+  probe("Sequence.createCaptionTrack (API ExtendScript, đã xác nhận KHÔNG có trong UXP)", () => {
+    const p = _ppro.Sequence && _ppro.Sequence.prototype;
+    return (p && typeof p.createCaptionTrack === "function") ? "có" : "KHÔNG có";
   });
 
   // Đọc trạng thái clip đang chọn nếu có — không bắt buộc phải chọn gì

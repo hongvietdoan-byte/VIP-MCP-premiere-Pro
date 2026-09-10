@@ -24,6 +24,22 @@ Theo `PLAN_MCP_PREMIERE_SRT_TO_TEXT_TIMELINE.docx` (user cung cấp), implement 
 - **Kết luận tạm**: `srt_to_mogrt_captions` hiện dùng được để đặt đúng timing/thời lượng graphic clip theo từng cue SRT, nhưng **text vẫn giữ nguyên mặc định của template** — chưa tự động hoá được nội dung caption qua đường này. Cần điều tra thêm API nào khác (ngoài `TrackItem.getComponentChain()`) có thể set được Essential Graphics text property, hoặc chờ Adobe bổ sung.
 - **Đường thay thế đã xác nhận từ trước**: Native Caption backend (`import_srt`) — timing tự động đúng 100% (cùng nguồn SRT), nhưng cần 1 bước kéo tay từ Project panel vào caption track trên timeline (Premiere API không có cách đặt caption track item qua script — xem mục cũ về `CaptionTrack`, class này cũng chỉ có `getTrackItems` để đọc, không có API tạo mới).
 
+## 🔴 SRT → Native Caption Track qua script — KHÔNG khả thi ở kiến trúc hiện tại (2026-09-10)
+
+Theo `PLAN_MCP_PREMIERE_SRT_TO_CAPTION_TRACK_DETAILED.docx` (user cung cấp), đường được khuyến nghị #1 là `Sequence.createCaptionTrack(projectItem, startAtSeconds, Sequence.CAPTION_FORMAT_SUBTITLE)` — **nhưng đây là API ExtendScript**, cần bridge CEP/ExtendScript riêng. Đã probe trực tiếp để kiểm chứng cảnh báo của chính tài liệu ("không nên giả định UXP thuần đã làm được"):
+
+- `Sequence.createCaptionTrack`: **KHÔNG có** trong UXP (xác nhận trực tiếp qua `Object.getOwnPropertyNames(Sequence.prototype)`).
+- `SequenceEditor.createCaptionTrack`: **KHÔNG có**.
+- `CaptionTrack` class (đọc được qua `sequence.getCaptionTrack(i)`) chỉ có: `getTrackItems`, `setMute`, `getIndex`, `createSetNameAction` — hoàn toàn không có API tạo/insert caption item nào.
+- Dự án hiện tại **chỉ có UXP, không có CEP/ExtendScript bridge** (`plugin/manifest.json` chỉ khai báo UXP panel) — muốn dùng đường ExtendScript phải xây thêm 1 extension CEP riêng chạy song song, là thay đổi kiến trúc lớn, và theo ghi chú cũ trong dự án (`anthropic-skills:premiere-uxp-api`) CEP đang dần gãy tương thích trên Premiere 2026, chỉ nên dùng làm fallback tạm + đánh dấu nợ kỹ thuật, không phải nền tảng chính.
+
+**Kết luận**: với kiến trúc UXP-only hiện tại, KHÔNG có cách nào tạo Native Caption Track từ SRT hoàn toàn qua script. 3 lựa chọn thực tế:
+1. **Giữ nguyên hiện trạng** — `import_srt` + 1 bước kéo tay vào caption track (timing tự động đúng, chỉ 1 thao tác UI).
+2. **Xây CEP/ExtendScript bridge riêng** cho mỗi tính năng `createCaptionTrack` — việc lớn, cần cân nhắc kỹ trước khi làm (đánh đổi nợ kỹ thuật CEP).
+3. **Tiếp tục hướng MOGRT** (mục phía trên) nếu tìm ra được cách set text — vẫn là graphic clip chứ không phải caption track thật, nhưng automate được 100% qua script.
+
+Chưa quyết định hướng — cần user chọn trước khi làm tiếp.
+
 ## ✅ Ưu tiên 1 — `insert_clip` / `overwrite_clip` đặt sai vị trí — ĐÃ FIX, LIVE-TESTED 2026-09-10
 
 Core tool cho use case gốc (đặt ảnh/clip lên timeline theo time range).
