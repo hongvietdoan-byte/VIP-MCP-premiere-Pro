@@ -2,28 +2,18 @@
 
 Cập nhật lần cuối: 2026-09-10. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
-## 🔴 Ưu tiên 0 — Sequence frame rate/timebase: giới hạn phiên bản Premiere, cần nâng cấp lên 2026 (26.2+)
+## ✅ Ưu tiên 0 — Sequence frame rate/timebase — ĐÃ GIẢI QUYẾT, LIVE-TESTED 2026-09-10 (sau khi nâng cấp Premiere 2026)
 
-User yêu cầu: **mọi sequence tạo mới luôn phải là 60fps**. Đã điều tra kỹ 2026-09-10, kết luận:
+User yêu cầu: **mọi sequence tạo mới luôn phải là 60fps**. Điều tra 2026-09-10 phát hiện: API duy nhất đọc/set frame rate thật (`SequenceSettings.getVideoFrameRate()`/`setVideoFrameRate()` + `FrameRate.createWithValue()`) chỉ tồn tại từ **Premiere Pro 26.2+** — máy công ty lúc đó chỉ có Premiere 2025 nên hoàn toàn không set/verify được qua script (đã thử cả cách nhân bản template — `createCloneAction` không bảo toàn frame rate, xác nhận không đáng tin).
 
-- API DUY NHẤT đọc/set được frame rate thật của sequence — `SequenceSettings.getVideoFrameRate()`/`setVideoFrameRate()` + `FrameRate.createWithValue()` — **chỉ tồn tại từ Premiere Pro bản 26.2 trở lên** (xác nhận qua tài liệu research user cung cấp, đối chiếu docs Adobe chính thức).
-- Máy công ty này chỉ cài **Adobe Premiere Pro 2025** (`C:\Program Files\Adobe\Adobe Premiere Pro 2025`, không có bản 2026/26.x nào) — live-test xác nhận `settings.setVideoFrameRate` không tồn tại trong prototype thật.
-- `Project.createSequence()` chỉ nhận `(name)`, không có overload presetPath, không có `createSequenceWithPresetPath` nào — không có đường nào khác để truyền frame rate lúc tạo.
-- Đã thử workaround: tạo 2 sequence template tay trong Premiere (`Template Youtube 1920x1080 60fps`, `Template Tiktok 1080x1920 60fps`, đã set 60fps qua UI) rồi `create_sequence` nhân bản (`createCloneAction`) + đổi tên. **KHÔNG hoạt động** — live-test `createCloneAction` không bảo toàn đúng frame rate của template gốc, sequence mới vẫn ra ~24fps (user xác nhận bằng mắt trong Premiere UI).
-- Kết luận: **ở Premiere Pro 2025, không có cách nào (script) để set hoặc verify frame rate thật của sequence.** `create_sequence` hiện tại (code đã sửa) báo rõ `timebaseApplied: false` kèm lý do, không báo thành công giả.
+**User đã nâng cấp lên Premiere Pro 2026.** Sau khi bật Developer Mode cho bản mới + reload plugin, đã implement và **live-test thành công đầy đủ**:
+- `get_sequence_settings(sequenceName?)` — đọc fps/ticksPerFrame/resolution thật qua `getVideoFrameRate()`/`getVideoFrameRect()`.
+- `set_sequence_frame_rate(fps, sequenceName?)` — set qua `FrameRate.createWithValue()` + `executeTransaction`, **verify read-back thật** (so before/after, throw nếu no-op). Dùng rational chuẩn cho 23.976/29.97/59.94 (`CANONICAL_FPS` map trong `plugin/premiereActions.js`), không so sánh float trực tiếp.
+- `create_sequence(name, timebase=60, frameWidth?, frameHeight?)` — viết lại: tạo sequence trắng → gọi `setSequenceFrameRate` ngay → verify. Đã bỏ hẳn cách nhân bản template cũ (không cần nữa, không đáng tin).
+- **Live-test thật trên Premiere 2026**: tạo `MCP Test 60fps v2` (1920x1080) → `timebaseApplied:true, actualFps:60`, xác nhận độc lập qua `get_sequence_settings` (`fps:60, ticksPerFrame:4233600000`, đúng công thức `254016000000/60`). Đổi fps 60→23.976 qua `set_sequence_frame_rate` → `beforeFps:60, afterFps:23.976023976023978` đúng như kỳ vọng. Tạo `MCP Test Tiktok 60fps` (1080x1920, custom frame size) → `frameSizeApplied:true`, đúng 60fps.
+- **Bonus fix**: phát hiện template `Template Youtube 1920x1080 60fps` thực ra chỉ 23.976fps (tên sai lệch với thực tế, không phải do code) — đã sửa về đúng 60fps thật qua `set_sequence_frame_rate`. `Template Tiktok 1080x1920 60fps` vốn đã đúng 60fps sẵn.
 
-**Quyết định 2026-09-10**: user chọn nâng cấp Premiere Pro lên bản 2026 (26.2+) qua Creative Cloud thay vì chấp nhận giới hạn. Đã mở app Creative Cloud cho user tự update/install.
-
-**Việc cần làm sau khi user nâng cấp xong Premiere 2026:**
-1. Load lại plugin trong UXP Developer Tool trỏ đúng Premiere Pro 2026 (không phải 2025).
-2. Implement lại theo đúng kiến trúc trong tài liệu research (`README_MCP_Premiere_Sequence_FPS_60fps.docx`, user cung cấp 2026-09-10):
-   - Tool `get_sequence_settings` riêng: đọc actual fps, ticks/timebase, resolution, display format.
-   - Tool `set_sequence_frame_rate(fps)` riêng: set qua `FrameRate.createWithValue()`, **verify read-back** (đọc lại `getVideoFrameRate()` sau khi set, so `before`/`after`, coi bridge trả OK nhưng không đổi = lỗi no-op chứ không phải thành công).
-   - `create_sequence` nhận `frame_rate` tuỳ chọn: tạo sequence trắng bằng preset mặc định → gọi `set_sequence_frame_rate` → verify.
-   - Dùng rational number (23.976=24000/1001, 29.97=30000/1001, 59.94=60000/1001), KHÔNG so sánh bằng float decimal.
-   - Không nhầm `videoDisplayFormat`/timecode display với frame rate thật.
-3. Xoá bỏ đoạn code nhân bản template hiện tại trong `createSequence()` (`plugin/premiereActions.js`, không còn cần thiết khi có API set trực tiếp) — nhưng giữ lại 2 sequence template có sẵn trong project phòng khi cần rollback.
-4. Test lại đủ các fps: 23.976, 24, 25, 29.97, 30, 50, 59.94, 60.
+**Chưa test**: đủ toàn bộ dải fps (24, 25, 29.97, 30, 50, 59.94) — mới test 60 và 23.976. Nên test nốt trước khi coi là hoàn toàn ổn định.
 
 ## ✅ Ưu tiên 1 — `insert_clip` / `overwrite_clip` đặt sai vị trí — ĐÃ FIX, LIVE-TESTED 2026-09-10
 
@@ -58,8 +48,8 @@ Bỏ qua (đã biết là stub cố định, không cần test): `add_text_overl
 
 - Vài clip `icon.png` rác quanh mốc ~3599-3600s trên video track 0 của sequence "Active Sequence" và "test 1" trong `test mới.prproj` (project cũ, không phải `Premiere test.prproj` hiện tại).
 - Bin thừa `MCP Test Bin` trong `Premiere test.prproj` — tạo lúc test `create_bin` 2026-09-10, an toàn xoá.
-- Sequence test dư trong `Premiere test.prproj`: `Test 2` (đã dùng để test insert_clip/select_all_clips, có 1 clip icon.png @0s) — an toàn xoá nếu không cần giữ làm reference.
-- **KHÔNG xoá** 2 sequence template `Template Youtube 1920x1080 60fps` / `Template Tiktok 1080x1920 60fps` — vẫn cần cho workaround hiện tại và có thể cần tham khảo sau khi nâng cấp Premiere.
+- Sequence test dư trong `Premiere test.prproj`: `Test 2` (đã dùng để test insert_clip/select_all_clips, có 1 clip icon.png @0s), `MCP Test 60fps v2` (đổi thành 23.976fps lúc test set_sequence_frame_rate), `MCP Test Tiktok 60fps` — tất cả an toàn xoá, không còn cần giữ.
+- 2 sequence template `Template Youtube 1920x1080 60fps` / `Template Tiktok 1080x1920 60fps` — không còn được code tham chiếu (đã bỏ cách nhân bản template), nhưng đã sửa về đúng 60fps thật — giữ lại tuỳ ý làm tham khảo, không bắt buộc.
 
 ## Vận hành trên máy mới
 
