@@ -2,6 +2,17 @@
 
 Cập nhật lần cuối: 2026-09-10. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
+## ⚠️ Premiere crash sau khi chạy `run_mic_check_workflow` lần đầu (2026-09-10) — đã giảm thiểu, chưa chắc chắn nguyên nhân
+
+Live-test đầu tiên `run_mic_check_workflow` (64 ảnh, gộp toàn bộ pipeline FFWS thành 1 lệnh) chạy xong báo kết quả đúng (`placed: 64, failed: []`), nhưng **ngay sau đó Premiere Pro tắt đột ngột** (user báo trực tiếp). Kiểm tra lại:
+- Premiere tự mở lại được, project không mất dữ liệu — sequence `Mic Check Auto Test` với đủ 64 clip, duration đúng 100% vẫn còn nguyên sau khi mở lại (autosave/recovery hoạt động tốt).
+- **Chưa có bằng chứng nhân quả chắc chắn** giữa `run_mic_check_workflow` và crash — có thể trùng hợp.
+- Nhưng khớp với cảnh báo đã biết từ trước trong dự án (`anthropic-skills:premiere-uxp-api` / `references/uxp-api-behaviors.md`): "UXP timeline operations có thể block main thread dù bọc async/await... thao tác nhiều có thể treo UI hoặc crash Premiere. Với batch lớn, cân nhắc UXP Hybrid Plugin (native C++) thay vì thuần JS." — workflow này chạy ~150+ `executeTransaction` liên tiếp trong vài giây (mỗi ảnh = insert + move + set duration = 3 transaction riêng × 64 ảnh).
+
+**Đã giảm thiểu**: thêm delay 80ms giữa mỗi placement trong `batchPlaceClips()` (`plugin/premiereActions.js`, hằng số `BATCH_PLACEMENT_DELAY_MS`) — 64 item chỉ thêm ~5s tổng thời gian chạy, đổi lại giảm tốc độ dồn transaction. **Chưa re-test lại sau khi thêm delay** — cần chạy lại `run_mic_check_workflow` 1 lần nữa để xác nhận có còn crash không trước khi coi là đã ổn định.
+
+**Nếu vẫn crash sau delay**: cân nhắc chunk batch thành nhóm nhỏ hơn (vd 10 ảnh/lần, nghỉ giữa các nhóm), hoặc điều tra sâu hơn theo hướng UXP Hybrid Plugin như tài liệu gợi ý (việc lớn, chỉ làm nếu delay không đủ).
+
 ## 🚧 ĐANG LÀM — Workflow "Mic Check" tối ưu, Phương án B (2026-09-10)
 
 User yêu cầu tối ưu workflow FFWS (video nền + ảnh theo caption + SRT) thành quy trình A→Z nhanh hơn, không cần Claude cho các lần chạy lại. Đã chốt **Phương án B**: chuẩn hoá input thành JSON/SRT thay vì đọc thẳng `.docx` trong plugin (tránh phải nhúng thư viện unzip vào UXP — xem lý do so sánh Phương án A/B trong lịch sử chat, tóm tắt: A (nhúng JSZip vào plugin) không lag nhưng dễ vỡ vì cấu trúc XML Word không cố định + khó debug trong Premiere; B dùng Node ngoài Premiere, input JSON có schema rõ, ít rủi ro hơn).

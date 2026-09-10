@@ -3528,6 +3528,19 @@ async function overwriteClip(params, log) {
 // High-level batch tool — đặt nhiều clip (ảnh/video) cùng lúc trong 1 lệnh MCP, tránh phải gọi
 // insert_clip/overwrite_clip lặp lại từng cái (cùng nguyên tắc "1 lệnh xử lý cả batch" đã áp dụng
 // cho srt_to_mogrt_captions). Mỗi placement độc lập — 1 cái lỗi không chặn các cái còn lại.
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// LƯU Ý 2026-09-10: Premiere crash thật sau 1 lần chạy run_mic_check_workflow đặt 64 ảnh liên tiếp
+// (~150+ executeTransaction dồn dập trong vài giây — mỗi placement gồm insert + move + set
+// duration = 3 transaction riêng). Khớp với cảnh báo đã biết trong dự án (xem
+// references/uxp-api-behaviors.md — "UXP timeline operations có thể block main thread... thao tác
+// nhiều có thể treo UI hoặc crash Premiere"). Chưa có bằng chứng nhân quả chắc chắn (có thể trùng
+// hợp) nhưng thêm delay nhỏ giữa mỗi placement là chi phí thấp để giảm rủi ro — 64 item × 80ms chỉ
+// thêm ~5s, không đáng kể so với rủi ro crash mất dữ liệu.
+const BATCH_PLACEMENT_DELAY_MS = 80;
+
 async function batchPlaceClips({ placements }, log) {
   if (!Array.isArray(placements) || placements.length === 0) {
     throw new Error("Phải truyền placements là mảng không rỗng.");
@@ -3552,6 +3565,7 @@ async function batchPlaceClips({ placements }, log) {
       failed.push({ index: i, itemName: p.itemName, startSeconds: p.startSeconds, error: err });
       if (log) log(`Placement ${i} LỖI: ${err}`, "warn");
     }
+    if (i < placements.length - 1) await sleep(BATCH_PLACEMENT_DELAY_MS);
   }
   return { total: placements.length, placed: results.length, failed };
 }
