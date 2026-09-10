@@ -39,9 +39,20 @@ Theo `PLAN_MCP_PREMIERE_SRT_TO_CAPTION_TRACK_DETAILED.docx` (user cung cấp), �
 
 **Kết luận cuối**: với kiến trúc UXP-only hiện tại (không CEP/ExtendScript), KHÔNG có cách nào tạo Native Caption Track từ SRT hoàn toàn qua script.
 
-**⚠️ Đính chính (2026-09-10, sau khi verify kỹ hơn)**: lúc điều tra ban đầu thấy sequence `FFWS SEA Fall 2026 Week2` có 1 caption track với 65 item, đếm trùng khớp số cue SRT nên tưởng nhầm là kết quả của việc user kéo tay SRT vào timeline. **Sai** — đối chiếu lại timing từng item với SRT gốc cho thấy lệch đều ~0.2s so với timestamp SRT thật (vd dòng 1: SRT 0.2s→1.333s nhưng caption thực tế 0s→1.117s), và tên item là `"SyntheticCaption"` — đây là **caption tự động sinh ra từ tính năng Speech-to-Text của Premiere** (phân tích audio thật trong `clip background.mp4`), không phải từ file SRT. Trùng số lượng chỉ là tình cờ vì audio khớp sát kịch bản gốc. **File SRT vẫn CHƯA từng được kéo tay vào timeline của sequence này** — cần user tự làm bước đó nếu muốn caption khớp chính xác 100% với SRT.
+**⚠️ Đính chính lần 1 (2026-09-10)**: lúc điều tra ban đầu thấy sequence `FFWS SEA Fall 2026 Week2` có 1 caption track với 65 item, đếm trùng khớp số cue SRT nên tưởng nhầm là kết quả của việc user kéo tay SRT vào timeline. **Sai** — đối chiếu timing cho thấy lệch đều ~0.2s so với SRT thật, tên item `"SyntheticCaption"` — hoá ra đó là caption **Speech-to-Text tự động** của Premiere (phân tích audio thật) còn sót lại từ trước, che mất kết quả thật.
 
-**Quyết định**: dừng ở đây, không tiếp tục Phương án B tự động hoá bằng GUI automation (rủi ro cao, user đã cân nhắc và không chọn) hay xây CEP bridge (việc lớn, chưa cần thiết vì đường kéo tay đã đủ dùng). Có thể tiếp tục hướng MOGRT (mục phía trên) nếu sau này cần tự động hoá text 100%, nhưng không phải ưu tiên hiện tại.
+**✅ Xác nhận cuối cùng (2026-09-10, sau khi user xoá track cũ + kéo lại SRT)**: sau khi xoá hẳn caption track cũ (Speech-to-Text) rồi kéo lại đúng file `FFWS_SEA_FALL_2026_Week2.srt` từ Project panel vào timeline, đọc lại timing thật:
+
+| Cue | SRT gốc | Caption thật trên timeline | Lệch |
+|---|---|---|---|
+| 1 | 0.2s→1.333s | 0.2s→1.317s | ~1 frame (60fps) |
+| 2 | 1.4s→2.2s | 1.4s→2.2s | khớp tuyệt đối |
+| 3 | 2.633s→3.133s | 2.617s→3.117s | ~1 frame |
+| 4 | 3.133s→3.366s | 3.117s→3.35s | ~1 frame |
+
+Khớp đúng với SRT (chênh lệch ~0.016s = đúng 1 frame ở 60fps, do Premiere làm tròn caption về frame boundary — bình thường, không phải lỗi). **Kéo tay SRT → caption track hoạt động đúng và đáng tin cậy**, chỉ cần đảm bảo không có caption track cũ nào (vd từ Speech-to-Text) còn tồn tại trước khi kéo, nếu không Premiere có thể giữ nguyên track cũ thay vì tạo/ghi đè bằng dữ liệu SRT mới.
+
+**Quyết định cuối**: dùng đường kéo tay làm chuẩn cho native caption track — đã live-test xác nhận hoạt động đúng. Không cần GUI automation hay CEP bridge. Có thể tiếp tục hướng MOGRT (mục phía trên) nếu sau này cần tự động hoá 100% không cần thao tác tay, nhưng không phải ưu tiên hiện tại vì đường kéo tay đã đủ tin cậy.
 
 **Ước lượng thời gian nếu sau này muốn thử tiếp** (2026-09-10, chưa làm — ghi lại để tham khảo):
 - **Route D — XML/FCPXML interchange**: ~1-3 giờ cho phần nghiên cứu (export sequence có caption thật → đọc cấu trúc XML → thử sửa tay thêm 2-3 caption → import lại xem có tạo caption track không). Rẻ để thử, biết kết quả nhanh — nếu không work thì dừng ngay, nếu work mới cần thêm vài giờ viết generator SRT→XML.
