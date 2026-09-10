@@ -2,6 +2,17 @@
 
 Cập nhật lần cuối: 2026-09-10. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
+## ✅ `scripts/Chuyen_Doi_Mic_Check.bat` — kéo-thả file docx, không cần gõ lệnh (2026-09-10)
+
+Cách dùng đơn giản nhất cho `docx_to_mic_check.py`: kéo file `.docx` thả vào file `.bat` này (đặt shortcut ra Desktop nếu muốn) — tự suy ra `--images`/`--out-dir` từ đúng thư mục chứa file docx (đúng quy ước "mọi thứ nằm phẳng 1 thư mục" của workflow Mic Check), tự kiểm tra Python đã cài chưa, tự báo lỗi rõ nếu thả nhầm file không phải `.docx`.
+
+**2 bug thật đã fix khi test** (không phải do môi trường test — đã live-test qua `cmd.exe` thật):
+1. `%~dp1` (thư mục file được thả) luôn có `\` ở cuối — đặt trong `"..."` thì Windows hiểu nhầm `\"` là ký tự thoát, làm gộp nhầm `--out-dir` vào chung giá trị `--images`, khiến `argparse` báo thiếu `--out-dir`. Fix: bỏ `\` cuối trước khi dùng.
+2. Python in tiếng Việt bị `UnicodeEncodeError` (rơi về codepage cp1252) dù đã có `chcp 65001` trong .bat — không nên tin console tự nhận đúng codepage. Fix: ép `PYTHONIOENCODING=utf-8` cho tiến trình Python con.
+3. (Ghi chú kỹ thuật) File `.bat` phải lưu CRLF, không phải LF — cmd.exe đọc sai từng dòng nếu file chỉ có LF.
+
+Đã live-test full: kéo thật file `FFWS_SEA_FALL_2026_Week2.docx` vào `.bat`, ra đúng kết quả giống hệt gọi lệnh tay.
+
 ## ✅ Premiere crash sau khi chạy `run_mic_check_workflow` lần đầu (2026-09-10) — đã giảm thiểu, live-test lại KHÔNG crash
 
 Live-test đầu tiên `run_mic_check_workflow` (64 ảnh, gộp toàn bộ pipeline FFWS thành 1 lệnh) chạy xong báo kết quả đúng (`placed: 64, failed: []`), nhưng **ngay sau đó Premiere Pro tắt đột ngột** (user báo trực tiếp). Kiểm tra lại:
