@@ -2962,8 +2962,25 @@ async function insertMogrtCaption({ mogrtPath, startSeconds, durationSeconds, te
   let textError = null;
   if (text != null) {
     try {
+      // LƯU Ý 2026-09-10: đã live-test kỹ trên Premiere 2026 — với MOGRT chèn qua
+      // insertMogrtFromPath(), text layer thật nằm LỒNG bên trong component "AE.ADBE Graphic
+      // Group", KHÔNG phải sibling top-level như 1 lần probe ban đầu tưởng nhầm (lần đó do
+      // track đã có sẵn item cũ từ nhiều lần thử trước, không phải hành vi chuẩn của 1 lần insert
+      // sạch). Component "AE.ADBE Graphic Group" chỉ có API getParam/getParamCount (param transform
+      // chung: Position/Scale/Rotation/Anchor) — KHÔNG có getComponentChain/getChildren/getChildAt
+      // Index nào để drill xuống từng text layer con. Đã thử cả "Basic Title.mogrt" và "Simple Web
+      // Caption.mogrt", cùng kết quả. Kết luận: set text theo cách này KHÔNG khả dụng ở bản Premiere
+      // hiện tại qua TrackItem.getComponentChain() — cần API khác (chưa tìm ra) hoặc chờ Adobe bổ
+      // sung. Xem TODO.md mục MOGRT text.
       const textComp = await findComponentInItemChain(newItem, "AE.ADBE Text");
-      if (!textComp) throw new Error("Không tìm thấy component AE.ADBE Text trên MOGRT vừa chèn.");
+      if (!textComp) {
+        throw new Error(
+          "Text layer nằm lồng trong 'AE.ADBE Graphic Group', component này không có API drill-down " +
+          "(chỉ có getParam/getParamCount cho transform chung) — KHÔNG set được text qua " +
+          "getComponentChain() ở bản Premiere hiện tại. MOGRT vẫn được chèn đúng vị trí/thời lượng, " +
+          "chỉ là giữ nguyên text mặc định của template."
+        );
+      }
       const param = await findParamByName(textComp, textParamName);
       if (!param) throw new Error(`Không tìm thấy param "${textParamName}" trên component Text.`);
       let setOk;
@@ -3014,8 +3031,14 @@ function parseSrt(content) {
   return cues;
 }
 
+// LƯU Ý 2026-09-10: pathToFileUrl() percent-encode sẵn (vd " " → "%20") — nhưng
+// uxpFs.getEntryWithUrl() tự encode thêm 1 lần nữa, ra URL hỏng dạng "%2520" (đã xác nhận lỗi thật
+// khi đọc file có dấu cách trong path). Với hàm này dùng URL RAW (spaces thật, không encode) —
+// khác pattern pathToFileUrl() đang dùng ở detectSilenceRegions (chưa test, có thể cùng bug, chưa
+// sửa vì chưa xác nhận qua live-test — xem TODO.md).
 async function readTextFile(path) {
-  const entry = await uxpFs.getEntryWithUrl(pathToFileUrl(path));
+  const rawUrl = "file:///" + path.replace(/\\/g, "/");
+  const entry = await uxpFs.getEntryWithUrl(rawUrl);
   return await entry.read({ format: uxpFormats.utf8 });
 }
 

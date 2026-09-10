@@ -15,6 +15,15 @@ User yêu cầu: **mọi sequence tạo mới luôn phải là 60fps**. Điều 
 
 **Chưa test**: đủ toàn bộ dải fps (24, 25, 29.97, 30, 50, 59.94) — mới test 60 và 23.976. Nên test nốt trước khi coi là hoàn toàn ổn định.
 
+## 🟡 SRT → MOGRT caption timeline — VỊ TRÍ hoạt động, TEXT chưa set được (2026-09-10)
+
+Theo `PLAN_MCP_PREMIERE_SRT_TO_TEXT_TIMELINE.docx` (user cung cấp), implement `insert_mogrt_caption` + `srt_to_mogrt_captions` (batch, 1 lệnh MCP xử lý cả file SRT). Live-test trên Premiere 2026:
+
+- **Vị trí/thời lượng: hoạt động đúng, verify thật** — `SequenceEditor.insertMogrtFromPath()` tồn tại, tạo graphic clip thật, nhưng bỏ qua tham số tick (cùng bug họ insert_clip cũ) — đã áp dụng lại pattern chèn tạm → `createMoveAction` về đúng vị trí, test với `Basic Title.mogrt` và `Simple Web Caption.mogrt` đều cho `positionOk: true` chính xác đến 3 chữ số thập phân giây.
+- **Set text: KHÔNG hoạt động được** — text layer thật của MOGRT nằm lồng bên trong component `AE.ADBE Graphic Group`, nhưng component này chỉ có API `getParam`/`getParamCount` (param transform chung: Position/Scale/Rotation/Anchor), **không có** `getComponentChain`/`getChildren`/`getChildAtIndex` nào để drill xuống từng text layer con bên trong. Đã test cả `Basic Title.mogrt` lẫn `Simple Web Caption.mogrt`, cùng kết quả. (1 lần probe ban đầu tưởng thấy `AE.ADBE Text` ở top-level chain — hoá ra do track đã có sẵn item cũ từ nhiều lần thử trước, không phải hành vi chuẩn của 1 lần insert sạch — đã tái xác nhận trên sequence hoàn toàn mới, sạch.)
+- **Kết luận tạm**: `srt_to_mogrt_captions` hiện dùng được để đặt đúng timing/thời lượng graphic clip theo từng cue SRT, nhưng **text vẫn giữ nguyên mặc định của template** — chưa tự động hoá được nội dung caption qua đường này. Cần điều tra thêm API nào khác (ngoài `TrackItem.getComponentChain()`) có thể set được Essential Graphics text property, hoặc chờ Adobe bổ sung.
+- **Đường thay thế đã xác nhận từ trước**: Native Caption backend (`import_srt`) — timing tự động đúng 100% (cùng nguồn SRT), nhưng cần 1 bước kéo tay từ Project panel vào caption track trên timeline (Premiere API không có cách đặt caption track item qua script — xem mục cũ về `CaptionTrack`, class này cũng chỉ có `getTrackItems` để đọc, không có API tạo mới).
+
 ## ✅ Ưu tiên 1 — `insert_clip` / `overwrite_clip` đặt sai vị trí — ĐÃ FIX, LIVE-TESTED 2026-09-10
 
 Core tool cho use case gốc (đặt ảnh/clip lên timeline theo time range).
