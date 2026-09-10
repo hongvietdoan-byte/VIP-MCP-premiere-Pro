@@ -3450,6 +3450,14 @@ async function createSequence({ name, fromSelectedMedia = false, timebase = 60, 
 
   let finalName = name;
   try { finalName = newSequence.name || (await newSequence.getName()) || name; } catch {}
+  // LƯU Ý 2026-09-10: đã xác nhận qua README_MCP_Premiere_Sequence_FPS_60fps.docx (user cung cấp) —
+  // SequenceSettings.getVideoFrameRate()/setVideoFrameRate() (API DUY NHẤT đọc/set được frame rate
+  // thật) chỉ tồn tại từ Premiere Pro 26.2 trở lên. Máy này chỉ cài Premiere Pro 2025 (< 26.2) nên
+  // KHÔNG CÓ CÁCH NÀO verify frame rate thật qua script — kể cả sau khi clone template, live-test
+  // thực tế cho thấy vẫn ra ~24fps chứ không giữ đúng 60fps của template (createCloneAction không
+  // bảo toàn frame rate như kỳ vọng). timebaseApplied vì vậy KHÔNG được báo true — đây là unverified/
+  // false thật sự, không phải chỉ là "chưa verify được". User cần tự kiểm tra + set tay Sequence
+  // Settings trên Premiere 2025, hoặc nâng cấp lên Premiere 2026 (26.2+) để dùng đúng API chính thức.
   let timebaseString = null;
   try { timebaseString = await newSequence.getTimebase(); } catch {}
 
@@ -3462,7 +3470,8 @@ async function createSequence({ name, fromSelectedMedia = false, timebase = 60, 
     renamed,
     renameError,
     timebase,
-    timebaseApplied: true,
+    timebaseApplied: false,
+    timebaseError: "Premiere Pro bản cài trên máy này (2025, < 26.2) KHÔNG có API getVideoFrameRate/setVideoFrameRate — không thể set hay verify frame rate thật qua script ở bản này (đã xác nhận: clone template vẫn ra ~24fps, không giữ được 60fps của template). Cần tự kiểm tra + chỉnh tay Sequence Settings trong Premiere, hoặc nâng cấp Premiere Pro lên bản 2026 (26.2+) để dùng đúng API.",
     timebaseString,
     frameWidth: frameWidth || null,
     frameHeight: frameHeight || null,
