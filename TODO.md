@@ -10,6 +10,8 @@ Phát hiện khi user yêu cầu "cắt đoạn ảnh thừa cho khớp caption"
 
 **Cần làm tiếp**: bất kỳ workflow nào TRƯỚC 2026-09-10 dùng `insert_clip`/`overwrite_clip`/`batch_place_clips` với `durationSeconds` (đặc biệt ảnh tĩnh) đều có thể bị sai duration — nên re-verify nếu còn dùng kết quả cũ.
 
+**Bug phụ đã fix cùng lúc — idempotency khi gọi lại `overwrite_clip` đúng vị trí cũ**: nếu gọi `overwrite_clip`/`insert_clip`/`batch_place_clips` 2 lần liên tiếp với cùng `itemName` + `startSeconds` (vd chạy lại workflow), lần thứ 2 báo lỗi "KHÔNG xác định được track item mới" — vì Premiere merge overwrite vào track item CŨ đã có sẵn thay vì tạo item mới, khiến cơ chế phát hiện "item mới" (so sánh signature start-time trước/sau) không thấy gì thay đổi. Đã fix: thêm `findExistingItemAtPosition()` làm fallback — nếu không tìm được item "mới", tìm item đã có sẵn đúng tên+vị trí (dung sai 0.05s), coi như đã đúng chỗ, bỏ qua bước move, vẫn chạy tiếp bước set duration. Live-tested: gọi `overwrite_clip` 2-3 lần liên tiếp cùng vị trí với duration khác nhau mỗi lần, verify đều set đúng end time thật, không lỗi.
+
 ## ✅ Ưu tiên 0 — Sequence frame rate/timebase — ĐÃ GIẢI QUYẾT, LIVE-TESTED 2026-09-10 (sau khi nâng cấp Premiere 2026)
 
 User yêu cầu: **mọi sequence tạo mới luôn phải là 60fps**. Điều tra 2026-09-10 phát hiện: API duy nhất đọc/set frame rate thật (`SequenceSettings.getVideoFrameRate()`/`setVideoFrameRate()` + `FrameRate.createWithValue()`) chỉ tồn tại từ **Premiere Pro 26.2+** — máy công ty lúc đó chỉ có Premiere 2025 nên hoàn toàn không set/verify được qua script (đã thử cả cách nhân bản template — `createCloneAction` không bảo toàn frame rate, xác nhận không đáng tin).

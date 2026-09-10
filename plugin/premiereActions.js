@@ -3350,6 +3350,28 @@ async function findNewMatchingTrackItem(track, itemName, beforeSignatures) {
   return null;
 }
 
+// Fallback cho findNewMatchingTrackItem khi overwrite đè lên đúng vị trí đã có clip cùng tên/cùng
+// startSeconds từ trước (vd chạy lại workflow idempotent) — Premiere có thể tái dùng/merge vào
+// track item CŨ thay vì tạo item mới, nên không có signature "chưa từng thấy" nào xuất hiện dù
+// overwrite đã áp dụng thật. Trường hợp này, item đã nằm ĐÚNG vị trí sẵn rồi — không cần move, chỉ
+// cần trả về nó để bước set duration vẫn chạy.
+async function findExistingItemAtPosition(track, itemName, desiredSeconds) {
+  if (!track) return null;
+  let items;
+  try { items = await track.getTrackItems(ppro.Constants.TrackItemType.CLIP, false); } catch { return null; }
+  for (const item of items) {
+    let projItem;
+    try { projItem = await item.getProjectItem(); } catch { continue; }
+    let name;
+    try { name = projItem && projItem.name; } catch { continue; }
+    if (name !== itemName) continue;
+    let start;
+    try { start = await item.getStartTime(); } catch { continue; }
+    if (Math.abs(start.seconds - desiredSeconds) < 0.05) return item;
+  }
+  return null;
+}
+
 async function insertOrOverwriteClip({ itemName, startSeconds, videoTrackIndex = 0, audioTrackIndex = 0, durationSeconds, mode }, log) {
   // Bối cảnh bug (xem thêm [[premiere-25-6-4-api-corrections]] / [[premiere-mcp]] memory, mục
   // insert_clip, cập nhật 2026-09-10): SequenceEditor.createInsertProjectItemAction/
@@ -3402,8 +3424,18 @@ async function insertOrOverwriteClip({ itemName, startSeconds, videoTrackIndex =
   });
   if (!placedOk) throw new Error("executeTransaction trả về false khi đặt clip lên timeline.");
 
-  const newVideoItem = await findNewMatchingTrackItem(videoTrack, itemName, beforeVideoSigs);
-  const newAudioItem = await findNewMatchingTrackItem(audioTrack, itemName, beforeAudioSigs);
+  let newVideoItem = await findNewMatchingTrackItem(videoTrack, itemName, beforeVideoSigs);
+  let newAudioItem = await findNewMatchingTrackItem(audioTrack, itemName, beforeAudioSigs);
+  let usedFallback = false;
+
+  if (!newVideoItem && !newAudioItem) {
+    // Không tìm được item "mới" — thử fallback: Premiere có thể đã merge overwrite vào item cùng
+    // tên đã sẵn có đúng vị trí (chạy lại workflow idempotent). Nếu tìm thấy, coi như đã đúng vị
+    // trí, bỏ qua bước move.
+    newVideoItem = await findExistingItemAtPosition(videoTrack, itemName, startSeconds);
+    newAudioItem = await findExistingItemAtPosition(audioTrack, itemName, startSeconds);
+    usedFallback = true;
+  }
   const movedItems = [newVideoItem, newAudioItem].filter(Boolean);
 
   if (movedItems.length === 0) {
@@ -3414,24 +3446,26 @@ async function insertOrOverwriteClip({ itemName, startSeconds, videoTrackIndex =
     );
   }
 
-  const desiredTick = secondsToTick(startSeconds);
-  const currentStarts = [];
-  for (const item of movedItems) currentStarts.push(await item.getStartTime());
-  const offsets = currentStarts.map((cur) => desiredTick.subtract(cur));
+  if (!usedFallback) {
+    const desiredTick = secondsToTick(startSeconds);
+    const currentStarts = [];
+    for (const item of movedItems) currentStarts.push(await item.getStartTime());
+    const offsets = currentStarts.map((cur) => desiredTick.subtract(cur));
 
-  let movedOk;
-  await project.lockedAccess(() => {
-    movedOk = project.executeTransaction((compoundAction) => {
-      movedItems.forEach((item, i) => {
-        compoundAction.addAction(item.createMoveAction(offsets[i]));
-      });
-    }, `${mode === "insert" ? "Insert" : "Overwrite"} "${itemName}" qua MCP (bước 2/2: di chuyển về đúng vị trí)`);
-  });
-  if (!movedOk) {
-    throw new Error(
-      `Đã đặt "${itemName}" lên timeline nhưng createMoveAction trả về false khi di chuyển về ` +
-      `startSeconds=${startSeconds}. Clip hiện đang ở vị trí sai (gần mốc 1 giờ) — kiểm tra thủ công.`
-    );
+    let movedOk;
+    await project.lockedAccess(() => {
+      movedOk = project.executeTransaction((compoundAction) => {
+        movedItems.forEach((item, i) => {
+          compoundAction.addAction(item.createMoveAction(offsets[i]));
+        });
+      }, `${mode === "insert" ? "Insert" : "Overwrite"} "${itemName}" qua MCP (bước 2/2: di chuyển về đúng vị trí)`);
+    });
+    if (!movedOk) {
+      throw new Error(
+        `Đã đặt "${itemName}" lên timeline nhưng createMoveAction trả về false khi di chuyển về ` +
+        `startSeconds=${startSeconds}. Clip hiện đang ở vị trí sai (gần mốc 1 giờ) — kiểm tra thủ công.`
+      );
+    }
   }
 
   const finalStart = await movedItems[0].getStartTime();
