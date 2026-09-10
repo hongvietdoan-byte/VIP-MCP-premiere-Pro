@@ -203,6 +203,7 @@ function _sendReadyMessage() {
                    "insert_clip", "overwrite_clip", "duplicate_clip",
                    "create_sequence", "duplicate_sequence", "set_active_sequence",
                    "get_sequence_settings", "set_sequence_frame_rate",
+                   "insert_mogrt_caption", "srt_to_mogrt_captions",
                    "add_marker", "remove_marker", "update_marker",
                    "generate_and_import_srt", "import_transcript_json"]
   }));
@@ -234,7 +235,7 @@ async function _dispatchCommand(msg) {
         break;
       case "debug_get_element":    result = await _cmdDebugGetElement(params);              break;
       case "debug_inspect_chain":  result = await _cmdDebugInspectChain(params, bLog);     break;
-      case "debug_probe_api":      result = await _cmdDebugProbeApi();                      break;
+      case "debug_probe_api":      result = await _cmdDebugProbeApi(params);                break;
       case "debug_list_markers":   result = await _cmdDebugListMarkers(bLog);               break;
 
       // ====================================================================
@@ -332,6 +333,8 @@ async function _dispatchCommand(msg) {
       // Group 17c: Sequence Settings / Frame Rate — chỉ hoạt động Premiere Pro 26.2+ (2026-09-10)
       case "get_sequence_settings":  result = await getSequenceSettings(params);                  break;
       case "set_sequence_frame_rate": result = await setSequenceFrameRate(params);                break;
+      case "insert_mogrt_caption":   result = await insertMogrtCaption(params);                   break;
+      case "srt_to_mogrt_captions":  result = await srtToMogrtCaptions(params, bLog);              break;
 
       // Group 17b: Generic Markers (2026-09-09)
       case "add_marker":             result = await addMarker(params, bLog);                      break;
@@ -753,6 +756,46 @@ async function _cmdDebugProbeApi() {
   probe("ComponentParam.createKeyframe", () => {
     const p = _ppro.ComponentParam && _ppro.ComponentParam.prototype;
     return (p && typeof p.createKeyframe === "function") ? "có" : "KHÔNG có";
+  });
+
+  // --- Capability probe cho SRT→timeline (PLAN_MCP_PREMIERE_SRT_TO_TEXT_TIMELINE.docx, 2026-09-10) ---
+  probe("SequenceEditor.insertMogrtFromPath", () => {
+    const p = _ppro.SequenceEditor && _ppro.SequenceEditor.prototype;
+    return (p && typeof p.insertMogrtFromPath === "function") ? "có" : "KHÔNG có";
+  });
+  probe("SequenceEditor.insertMogrtFromLibrary", () => {
+    const p = _ppro.SequenceEditor && _ppro.SequenceEditor.prototype;
+    return (p && typeof p.insertMogrtFromLibrary === "function") ? "có" : "KHÔNG có";
+  });
+  probe("SequenceEditor full prototype (chứa từ 'insert'/'caption'/'mogrt'/'text')", () => {
+    const p = _ppro.SequenceEditor && _ppro.SequenceEditor.prototype;
+    if (!p) return "SequenceEditor không tồn tại";
+    return Object.getOwnPropertyNames(p).filter(n =>
+      /insert|caption|mogrt|text|graphic/i.test(n));
+  });
+  probe("SequenceEditor.insertMogrtFromPath.length (số tham số)", () => {
+    const p = _ppro.SequenceEditor && _ppro.SequenceEditor.prototype;
+    return p && typeof p.insertMogrtFromPath === "function" ? p.insertMogrtFromPath.length : "n/a";
+  });
+  probe("VideoClipTrackItem/TrackItem: từ 'component'/'graphic'/'mogrt'/'text' trong prototype", () => {
+    const out2 = {};
+    for (const cls of ["VideoClipTrackItem", "TrackItem", "GraphicClipTrackItem", "ClipTrackItem"]) {
+      const p = _ppro[cls] && _ppro[cls].prototype;
+      if (p) out2[cls] = Object.getOwnPropertyNames(p).filter(n => /component|graphic|mogrt|text/i.test(n));
+    }
+    return out2;
+  });
+  probe("_ppro top-level: từ 'Graphic'/'Mogrt'/'Motion'/'Essential' trong tên class", () => {
+    return Object.getOwnPropertyNames(_ppro).filter(n => /graphic|mogrt|motion|essential/i.test(n));
+  });
+  probe("CaptionTrack class tồn tại + prototype", () => {
+    const ct = _ppro.CaptionTrack;
+    if (!ct) return "_ppro.CaptionTrack KHÔNG tồn tại ở top-level";
+    return Object.getOwnPropertyNames(ct.prototype || {});
+  });
+  probe("Track (chung video/audio) full prototype", () => {
+    const p = _ppro.Track && _ppro.Track.prototype;
+    return p ? Object.getOwnPropertyNames(p) : "_ppro.Track KHÔNG tồn tại";
   });
 
   // Đọc trạng thái clip đang chọn nếu có — không bắt buộc phải chọn gì

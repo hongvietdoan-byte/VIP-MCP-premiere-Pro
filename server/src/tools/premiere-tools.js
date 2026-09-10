@@ -1169,6 +1169,46 @@ export const PREMIERE_TOOLS = [
   },
 
   {
+    name: 'insert_mogrt_caption',
+    description: 'Chèn 1 file .mogrt lên timeline tại đúng vị trí/thời lượng chỉ định + set text (component AE.ADBE Text, param "Source Text"), có verify read-back thật (vị trí + text). Dùng cho 1 caption đơn lẻ — với nhiều caption từ file SRT, dùng srt_to_mogrt_captions (1 lệnh xử lý cả file, hiệu quả hơn nhiều so với gọi tool này lặp lại).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        mogrtPath: { type: 'string', description: 'Đường dẫn tuyệt đối tới file .mogrt. Premiere có sẵn vài mẫu tại "<thư mục cài Premiere>\\Essential Graphics\\" (vd "Basic Title.mogrt", hoặc thư mục con "Captions and Subtitles\\").' },
+        startSeconds: { type: 'number', description: 'Vị trí đặt trên timeline (giây).' },
+        durationSeconds: { type: 'number', description: 'Thời lượng hiển thị (giây). Bỏ trống = giữ duration mặc định của mogrt.' },
+        text: { type: 'string', description: 'Nội dung text sẽ set vào mogrt. Bỏ trống = giữ text mặc định của template.' },
+        videoTrackIndex: { type: 'number', description: 'Video track đích (0 = V1). Mặc định 2 — nên dùng track riêng, không trùng video/ảnh nền.' },
+        textParamName: { type: 'string', description: 'Tên hiển thị của param text trong Effect Controls. Mặc định "Source Text" (đúng cho hầu hết mogrt chuẩn Adobe).' }
+      },
+      required: ['mogrtPath', 'startSeconds']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('insert_mogrt_caption', args, 20000);
+    }
+  },
+
+  {
+    name: 'srt_to_mogrt_captions',
+    description: 'Đọc 1 file .srt, parse thành các cue {start,end,text}, rồi chèn MỖI cue thành 1 clip MOGRT lên timeline đúng vị trí/thời lượng + set text — TẤT CẢ trong 1 lệnh MCP duy nhất (xử lý tuần tự bên trong plugin, không phải gọi lặp lại từng cue từ Claude). Trả về report: tổng cue, số tạo thành công, số verify đầy đủ (vị trí + text đều đúng), danh sách cue lỗi kèm lý do — không báo thành công giả nếu có cue lỗi.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        srtPath: { type: 'string', description: 'Đường dẫn tuyệt đối tới file .srt.' },
+        mogrtPath: { type: 'string', description: 'Đường dẫn tuyệt đối tới file .mogrt dùng làm template cho mọi cue.' },
+        videoTrackIndex: { type: 'number', description: 'Video track đích. Mặc định 2 — nên dùng track riêng cho caption.' },
+        textParamName: { type: 'string', description: 'Tên param text trong mogrt. Mặc định "Source Text".' },
+        startOffsetSeconds: { type: 'number', description: 'Cộng thêm vào mọi timestamp trong SRT (giây). Mặc định 0.' },
+        maxCues: { type: 'number', description: 'Giới hạn số cue xử lý (để test nhanh trên 1 phần file trước khi chạy full). Bỏ trống = xử lý hết.' }
+      },
+      required: ['srtPath', 'mogrtPath']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('srt_to_mogrt_captions', args, 300000);
+    }
+  },
+
+  {
     name: 'get_sequence_settings',
     description: 'Đọc settings thật của 1 sequence qua API (chỉ khả dụng Premiere Pro 26.2+): fps thật, ticksPerFrame, resolution. Dùng để verify sau khi tạo/đổi frame rate, hoặc kiểm tra 1 sequence bất kỳ trong project trước khi tin tưởng nó đúng 60fps.',
     inputSchema: {

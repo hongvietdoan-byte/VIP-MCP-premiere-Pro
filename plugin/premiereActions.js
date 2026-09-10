@@ -2876,6 +2876,193 @@ async function setClipMetadata({ metadata }, log) {
 // GROUP 14 — MOGRT & Text Overlay
 // ============================================================================
 
+// ----------------------------------------------------------------------------
+// SRT → MOGRT caption timeline (PLAN_MCP_PREMIERE_SRT_TO_TEXT_TIMELINE.docx, 2026-09-10)
+// ----------------------------------------------------------------------------
+// LƯU Ý — capability probe thật đã xác nhận (2026-09-10, Premiere Pro 2026):
+// - SequenceEditor.insertMogrtFromPath(path, tick, videoTrackIndex, numAudioTracks) TỒN TẠI và
+//   TẠO ĐƯỢC graphic clip thật (component chain: Opacity, Motion, Graphic Group, AE.ADBE Text).
+// - KHÔNG phải action-factory (không trả Action để compoundAction.addAction — làm vậy ném "Illegal
+//   Parameter type") — phải gọi TRỰC TIẾP trong project.lockedAccess(), không qua executeTransaction.
+// - Cùng bug họ với insert_clip/overwrite_clip trước khi fix: tham số tick vị trí bị BỎ QUA, clip
+//   luôn nối tiếp sau item cuối cùng trên track — phải tự tìm item mới rồi createMoveAction(offset)
+//   để đưa về đúng vị trí, y hệt pattern insertOrOverwriteClip().
+// - Text nằm ở component "AE.ADBE Text", param hiển thị "Source Text" (param đầu tiên, index 0) —
+//   set qua param.createSetValueAction(text, 0), cùng API đã dùng cho set_effect_param.
+
+// Tìm component theo matchName trong chain của 1 track item (khác findComponentByMatchName — hàm
+// đó nhận thẳng `clip` từ getActiveSequenceAndSelection, hàm này dùng khi đã có track item sẵn).
+async function findComponentInItemChain(item, matchName) {
+  const chain = await item.getComponentChain();
+  const count = await chain.getComponentCount();
+  for (let i = 0; i < count; i++) {
+    const comp = await chain.getComponentAtIndex(i);
+    let mn = null;
+    try { mn = await comp.getMatchName(); } catch {}
+    if (mn === matchName) return comp;
+  }
+  return null;
+}
+
+// Chèn 1 MOGRT tại đúng startSeconds/durationSeconds + set text, có verify read-back thật. Dùng
+// cho cả insert đơn lẻ lẫn vòng lặp batch (srtToMogrtCaptions bên dưới).
+async function insertMogrtCaption({ mogrtPath, startSeconds, durationSeconds, text, videoTrackIndex = 2, textParamName = "Source Text" }) {
+  if (!mogrtPath) throw new Error("Phải truyền mogrtPath.");
+  if (startSeconds == null) throw new Error("Phải truyền startSeconds.");
+
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+  const sequenceEditor = ppro.SequenceEditor.getEditor(sequence);
+  if (!sequenceEditor) throw new Error("Không lấy được SequenceEditor.");
+  const track = await sequence.getVideoTrack(videoTrackIndex);
+  if (!track) throw new Error(`Không có video track index ${videoTrackIndex}.`);
+
+  const before = await track.getTrackItems(ppro.Constants.TrackItemType.CLIP, false);
+  const beforeCount = before.length;
+
+  const placeholderTick = secondsToTick(startSeconds);
+  await project.lockedAccess(() => {
+    sequenceEditor.insertMogrtFromPath(mogrtPath, placeholderTick, videoTrackIndex, 1);
+  });
+
+  const after = await track.getTrackItems(ppro.Constants.TrackItemType.CLIP, false);
+  if (after.length <= beforeCount) {
+    throw new Error("insertMogrtFromPath() chạy xong nhưng không thấy track item mới — không xác nhận được tạo thành công.");
+  }
+  const newItem = after[after.length - 1];
+
+  // Bước 2: di chuyển về đúng vị trí (tick truyền vào insertMogrtFromPath bị bỏ qua).
+  const currentStart = await newItem.getStartTime();
+  const desiredTick = secondsToTick(startSeconds);
+  const offset = desiredTick.subtract(currentStart);
+  let moveOk;
+  await project.lockedAccess(() => {
+    moveOk = project.executeTransaction((compoundAction) => {
+      compoundAction.addAction(newItem.createMoveAction(offset));
+    }, "Move MOGRT caption qua MCP");
+  });
+  if (!moveOk) throw new Error("executeTransaction trả về false khi di chuyển MOGRT về vị trí.");
+
+  // Bước 3: set duration nếu có yêu cầu.
+  if (durationSeconds != null && durationSeconds > 0) {
+    const endTick = secondsToTick(startSeconds + durationSeconds);
+    let durOk;
+    await project.lockedAccess(() => {
+      durOk = project.executeTransaction((compoundAction) => {
+        compoundAction.addAction(newItem.createSetEndAction(endTick));
+      }, "Set MOGRT caption duration qua MCP");
+    });
+    if (!durOk) throw new Error("executeTransaction trả về false khi set duration.");
+  }
+
+  // Bước 4: set text vào component AE.ADBE Text / param "Source Text".
+  let textSet = false;
+  let textError = null;
+  if (text != null) {
+    try {
+      const textComp = await findComponentInItemChain(newItem, "AE.ADBE Text");
+      if (!textComp) throw new Error("Không tìm thấy component AE.ADBE Text trên MOGRT vừa chèn.");
+      const param = await findParamByName(textComp, textParamName);
+      if (!param) throw new Error(`Không tìm thấy param "${textParamName}" trên component Text.`);
+      let setOk;
+      await project.lockedAccess(() => {
+        setOk = project.executeTransaction((compoundAction) => {
+          compoundAction.addAction(param.createSetValueAction(text, 0));
+        }, "Set MOGRT caption text qua MCP");
+      });
+      if (!setOk) throw new Error("executeTransaction trả về false khi set text.");
+      textSet = true;
+    } catch (e) {
+      textError = String(e && e.message || e);
+    }
+  }
+
+  // Verify read-back thật — không tin return code, đọc lại vị trí thật từ Premiere.
+  const finalStart = (await newItem.getStartTime()).seconds;
+  const finalEnd = (await newItem.getEndTime()).seconds;
+  const positionOk = Math.abs(finalStart - startSeconds) < 0.05;
+
+  return { startSeconds, finalStart, finalEnd, positionOk, textSet, textError };
+}
+
+// Parser SRT chuẩn (index / HH:MM:SS,mmm --> HH:MM:SS,mmm / text 1+ dòng / dòng trống). Không dùng
+// float giây làm nguồn chân lý khi so sánh — chỉ dùng seconds ở biên MCP, tính toán nội bộ vẫn qua
+// TickTime của Premiere (secondsToTick).
+function parseSrt(content) {
+  const normalized = content.replace(/\r\n/g, "\n").replace(/^﻿/, "");
+  const blocks = normalized.split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+  const cues = [];
+  const toSeconds = (h, m, s, ms) => (+h) * 3600 + (+m) * 60 + (+s) + (+ms) / 1000;
+
+  for (const block of blocks) {
+    const lines = block.split("\n");
+    if (lines.length < 2) continue;
+    let idx = 0;
+    // Dòng đầu có thể là số thứ tự (thường có) — bỏ qua nếu là số nguyên thuần.
+    if (/^\d+$/.test(lines[0].trim())) idx = 1;
+    const timingLine = lines[idx];
+    const m = timingLine.match(/(\d+):(\d+):(\d+)[,.](\d+)\s*-->\s*(\d+):(\d+):(\d+)[,.](\d+)/);
+    if (!m) continue;
+    const startSeconds = toSeconds(m[1], m[2], m[3], m[4]);
+    const endSeconds = toSeconds(m[5], m[6], m[7], m[8]);
+    const text = lines.slice(idx + 1).join("\n").trim();
+    if (!text || startSeconds >= endSeconds) continue;
+    cues.push({ index: cues.length, startSeconds, endSeconds, text });
+  }
+  return cues;
+}
+
+async function readTextFile(path) {
+  const entry = await uxpFs.getEntryWithUrl(pathToFileUrl(path));
+  return await entry.read({ format: uxpFormats.utf8 });
+}
+
+// High-level batch tool — 1 lệnh MCP xử lý toàn bộ file SRT, KHÔNG để Claude gọi 1 lệnh/cue (đúng
+// yêu cầu kiến trúc trong PLAN_MCP_PREMIERE_SRT_TO_TEXT_TIMELINE.docx mục 13). Chạy tuần tự từng
+// cue trong tiến trình plugin, trả về report created/failed theo cue index — không báo success giả
+// nếu 1 phần cue lỗi.
+async function srtToMogrtCaptions({ srtPath, mogrtPath, videoTrackIndex = 2, textParamName = "Source Text", startOffsetSeconds = 0, maxCues }, log) {
+  if (!srtPath) throw new Error("Phải truyền srtPath.");
+  if (!mogrtPath) throw new Error("Phải truyền mogrtPath.");
+
+  const content = await readTextFile(srtPath);
+  let cues = parseSrt(content);
+  if (cues.length === 0) throw new Error("Parse SRT không ra cue nào — kiểm tra định dạng file.");
+  if (maxCues != null && maxCues > 0) cues = cues.slice(0, maxCues);
+
+  const results = [];
+  const failed = [];
+  for (const cue of cues) {
+    try {
+      const r = await insertMogrtCaption({
+        mogrtPath,
+        startSeconds: cue.startSeconds + startOffsetSeconds,
+        durationSeconds: cue.endSeconds - cue.startSeconds,
+        text: cue.text,
+        videoTrackIndex,
+        textParamName
+      });
+      results.push({ cueIndex: cue.index, ...r });
+      if (log) log(`Cue ${cue.index}: ${cue.startSeconds.toFixed(2)}s–${cue.endSeconds.toFixed(2)}s "${cue.text.slice(0, 30)}" → ${r.positionOk && r.textSet ? "OK" : "CẢNH BÁO"}`);
+    } catch (e) {
+      const err = String(e && e.message || e);
+      failed.push({ cueIndex: cue.index, startSeconds: cue.startSeconds, text: cue.text, error: err });
+      if (log) log(`Cue ${cue.index} LỖI: ${err}`, "warn");
+    }
+  }
+
+  const okCount = results.filter(r => r.positionOk && r.textSet).length;
+  return {
+    totalCues: cues.length,
+    created: results.length,
+    fullyVerifiedOk: okCount,
+    failed,
+    sample: results.slice(0, 3).concat(results.length > 3 ? [results[results.length - 1]] : [])
+  };
+}
+
 async function importMogrt({ path, insertAtSeconds }, log) {
   if (!path) throw new Error("Phải truyền đường dẫn file .mogrt.");
   const project = await ppro.Project.getActiveProject();
