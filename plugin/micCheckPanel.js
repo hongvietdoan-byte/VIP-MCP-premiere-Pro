@@ -117,9 +117,12 @@
   }
 
   $("mcPickFolder").addEventListener("click", async () => {
+    // LƯU Ý 2026-09-10: tên đúng là getFolder() — KHÔNG PHẢI getFolderForOpening() (không tồn tại,
+    // đã xác nhận live qua debug_probe_api: prototype thật của localFileSystem chỉ có getFileForOpening/
+    // getFileForSaving/getFolder/getTemporaryFolder/getPluginFolder/getDataFolder/readFromFile/writeToFile).
     let folderEntry;
     try {
-      folderEntry = await uxpFsPanel.getFolderForOpening();
+      folderEntry = await uxpFsPanel.getFolder();
     } catch (e) {
       logLine(`Lỗi chọn thư mục: ${e.message}`);
       return;
