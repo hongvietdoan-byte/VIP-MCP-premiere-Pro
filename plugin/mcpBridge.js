@@ -200,7 +200,7 @@ function _sendReadyMessage() {
                    "capture_frame", "export_as_xml", "export_to_media_encoder",
                    "transcribe_clip", "auto_caption_from_speech",
                    // MỚI 2026-09-09 — Timeline placement, sequence mgmt, generic markers, subtitle sync
-                   "insert_clip", "overwrite_clip", "batch_place_clips", "duplicate_clip",
+                   "insert_clip", "overwrite_clip", "batch_place_clips", "run_mic_check_workflow", "duplicate_clip",
                    "create_sequence", "duplicate_sequence", "set_active_sequence", "delete_sequence",
                    "get_sequence_settings", "set_sequence_frame_rate",
                    "insert_mogrt_caption", "srt_to_mogrt_captions",
@@ -326,6 +326,7 @@ async function _dispatchCommand(msg) {
       case "insert_clip":            result = await insertClip(params, bLog);                     break;
       case "overwrite_clip":         result = await overwriteClip(params, bLog);                  break;
       case "batch_place_clips":      result = await batchPlaceClips(params, bLog);                break;
+      case "run_mic_check_workflow": result = await runMicCheckWorkflow(params, bLog);             break;
       case "duplicate_clip":         result = await duplicateClip(params, bLog);                  break;
       case "create_sequence":        result = await createSequence(params);                       break;
       case "duplicate_sequence":     result = await duplicateSequence(params);                    break;

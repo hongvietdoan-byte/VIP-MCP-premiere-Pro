@@ -1162,6 +1162,28 @@ export const PREMIERE_TOOLS = [
   },
 
   {
+    name: 'run_mic_check_workflow',
+    description: 'Gộp toàn bộ workflow "Mic Check" (video nền + ảnh theo caption) thành 1 lệnh: tạo sequence 60fps → import media → đặt video nền → đặt toàn bộ ảnh theo cues.json (đã chuẩn hoá từ scripts/docx_to_json.js, chạy ngoài Premiere). Không tự parse .docx — cần cues.json làm sẵn trước. Vẫn cần 1 bước tay sau cùng: kéo SRT vào caption track (giới hạn UXP, không automate được).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cuesJsonPath: { type: 'string', description: 'Đường dẫn tuyệt đối tới cues.json (sinh ra bởi scripts/docx_to_json.js).' },
+        backgroundVideoPath: { type: 'string', description: 'Đường dẫn tuyệt đối tới video nền. Bỏ trống nếu không có video nền.' },
+        imagesDir: { type: 'string', description: 'Thư mục chứa các file ảnh được nhắc tới trong cues.json.' },
+        sequenceName: { type: 'string', description: 'Tên sequence mới sẽ tạo.' },
+        orientation: { type: 'string', enum: ['landscape', 'portrait'], description: 'Landscape = 1920x1080, portrait = 1080x1920. Mặc định landscape.' },
+        imageVideoTrackIndex: { type: 'number', description: 'Video track đặt ảnh. Mặc định 1 (V2).' },
+        backgroundVideoTrackIndex: { type: 'number', description: 'Video track đặt video nền. Mặc định 0 (V1).' },
+        timebase: { type: 'number', description: 'Frame rate sequence. Mặc định 60.' }
+      },
+      required: ['cuesJsonPath', 'imagesDir', 'sequenceName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('run_mic_check_workflow', args, 300000);
+    }
+  },
+
+  {
     name: 'duplicate_clip',
     description: 'Nhân bản clip đang chọn trên timeline, đặt bản sao lệch đi offsetSeconds về thời gian (và tuỳ chọn lệch track). Verify bằng cách đếm tổng track item trước/sau, không xác định chính xác track item mới bằng identity.',
     inputSchema: {

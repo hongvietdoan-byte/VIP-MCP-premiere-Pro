@@ -3556,6 +3556,88 @@ async function batchPlaceClips({ placements }, log) {
   return { total: placements.length, placed: results.length, failed };
 }
 
+// ----------------------------------------------------------------------------
+// Workflow "Mic Check" — 1 lệnh gộp toàn bộ pipeline (xem TODO.md mục "Workflow Mic Check tối ưu,
+// Phương án B"). Nhận cues.json đã chuẩn hoá sẵn (từ scripts/docx_to_json.js, chạy ngoài Premiere)
+// — không tự parse docx trong plugin (tránh phải nhúng thư viện unzip vào UXP).
+// ----------------------------------------------------------------------------
+async function runMicCheckWorkflow({
+  cuesJsonPath,
+  backgroundVideoPath,
+  imagesDir,
+  sequenceName,
+  orientation = "landscape",
+  imageVideoTrackIndex = 1,
+  backgroundVideoTrackIndex = 0,
+  timebase = 60
+}, log) {
+  if (!cuesJsonPath) throw new Error("Phải truyền cuesJsonPath.");
+  if (!sequenceName) throw new Error("Phải truyền sequenceName.");
+  if (!imagesDir) throw new Error("Phải truyền imagesDir.");
+
+  const cuesRaw = await readTextFile(cuesJsonPath);
+  let cuesData;
+  try { cuesData = JSON.parse(cuesRaw); } catch (e) { throw new Error(`Không parse được "${cuesJsonPath}" thành JSON: ${e.message}`); }
+  const cues = cuesData.cues;
+  if (!Array.isArray(cues) || cues.length === 0) throw new Error(`"${cuesJsonPath}" không có mảng "cues" hợp lệ.`);
+
+  const frameWidth = orientation === "portrait" ? 1080 : 1920;
+  const frameHeight = orientation === "portrait" ? 1920 : 1080;
+
+  if (log) log(`Tạo sequence "${sequenceName}" (${frameWidth}x${frameHeight}, ${timebase}fps)...`);
+  const seqResult = await createSequence({ name: sequenceName, timebase, frameWidth, frameHeight });
+  await setActiveSequenceTool({ name: seqResult.name });
+
+  const dirNormalized = imagesDir.replace(/[\\/]+$/, "");
+  const uniqueImageNames = [...new Set(cues.map((c) => c.image).filter(Boolean))];
+  const imagePaths = uniqueImageNames.map((name) => `${dirNormalized}\\${name}`);
+  const allPaths = backgroundVideoPath ? [backgroundVideoPath, ...imagePaths] : imagePaths;
+
+  if (log) log(`Import ${allPaths.length} file media...`);
+  const importResult = await importFilesToProject({ paths: allPaths });
+
+  let backgroundResult = null;
+  if (backgroundVideoPath) {
+    const bgName = backgroundVideoPath.split(/[\\/]/).pop();
+    if (log) log(`Đặt video nền "${bgName}"...`);
+    backgroundResult = await insertOrOverwriteClip({
+      itemName: bgName,
+      startSeconds: 0,
+      videoTrackIndex: backgroundVideoTrackIndex,
+      mode: "overwrite"
+    }, log);
+  }
+
+  const placements = cues
+    .filter((c) => c.image)
+    .map((c) => ({
+      itemName: c.image,
+      startSeconds: c.start,
+      durationSeconds: c.end - c.start,
+      videoTrackIndex: imageVideoTrackIndex,
+      mode: "overwrite"
+    }));
+  if (log) log(`Đặt ${placements.length} ảnh theo cues...`);
+  const placeResult = await batchPlaceClips({ placements }, log);
+
+  const captionCues = cues.filter((c) => c.text).length;
+
+  return {
+    sequenceName: seqResult.name,
+    timebaseApplied: seqResult.timebaseApplied,
+    actualFps: seqResult.actualFps,
+    importedFiles: importResult.imported.length,
+    background: backgroundResult,
+    images: placeResult,
+    totalCues: cues.length,
+    captionCuesAvailable: captionCues,
+    nextStep:
+      "Kéo file SRT tương ứng từ Project panel vào 1 caption track trên timeline (đảm bảo không còn " +
+      "caption track cũ nào trước đó, nếu không Premiere có thể giữ track cũ thay vì dùng SRT mới) — " +
+      "bước duy nhất chưa tự động hoá được, giới hạn thật của Premiere UXP (xem TODO.md)."
+  };
+}
+
 async function duplicateClip({ offsetSeconds = 1, videoTrackOffset = 0, audioTrackOffset = 0, alignToVideo = true }, log) {
   const { project, sequence, clip } = await getActiveSequenceAndSelection(log || function () {});
 
