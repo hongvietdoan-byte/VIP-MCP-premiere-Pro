@@ -1132,6 +1132,36 @@ export const PREMIERE_TOOLS = [
   },
 
   {
+    name: 'batch_place_clips',
+    description: 'Đặt nhiều clip (ảnh/video) lên timeline trong 1 lệnh MCP duy nhất — thay vì gọi insert_clip/overwrite_clip lặp lại từng cái. Mỗi placement độc lập, verify vị trí riêng; 1 cái lỗi không chặn các cái còn lại. Trả report placed/failed theo index.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        placements: {
+          type: 'array',
+          description: 'Danh sách clip cần đặt.',
+          items: {
+            type: 'object',
+            properties: {
+              itemName: { type: 'string', description: 'Tên item trong Project panel.' },
+              startSeconds: { type: 'number', description: 'Vị trí đặt trên timeline (giây).' },
+              durationSeconds: { type: 'number', description: 'Thời lượng hiển thị (giây) — chủ yếu cho ảnh tĩnh.' },
+              videoTrackIndex: { type: 'number', description: 'Video track đích (0 = V1). Mặc định 0.' },
+              audioTrackIndex: { type: 'number', description: 'Audio track đích. Mặc định 0.' },
+              mode: { type: 'string', enum: ['insert', 'overwrite'], description: 'Mặc định "overwrite".' }
+            },
+            required: ['itemName', 'startSeconds']
+          }
+        }
+      },
+      required: ['placements']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('batch_place_clips', args, 300000);
+    }
+  },
+
+  {
     name: 'duplicate_clip',
     description: 'Nhân bản clip đang chọn trên timeline, đặt bản sao lệch đi offsetSeconds về thời gian (và tuỳ chọn lệch track). Verify bằng cách đếm tổng track item trước/sau, không xác định chính xác track item mới bằng identity.',
     inputSchema: {

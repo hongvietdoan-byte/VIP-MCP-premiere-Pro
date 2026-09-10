@@ -3451,6 +3451,37 @@ async function overwriteClip(params, log) {
   return insertOrOverwriteClip({ ...params, mode: "overwrite" }, log);
 }
 
+// High-level batch tool — đặt nhiều clip (ảnh/video) cùng lúc trong 1 lệnh MCP, tránh phải gọi
+// insert_clip/overwrite_clip lặp lại từng cái (cùng nguyên tắc "1 lệnh xử lý cả batch" đã áp dụng
+// cho srt_to_mogrt_captions). Mỗi placement độc lập — 1 cái lỗi không chặn các cái còn lại.
+async function batchPlaceClips({ placements }, log) {
+  if (!Array.isArray(placements) || placements.length === 0) {
+    throw new Error("Phải truyền placements là mảng không rỗng.");
+  }
+  const results = [];
+  const failed = [];
+  for (let i = 0; i < placements.length; i++) {
+    const p = placements[i];
+    try {
+      const r = await insertOrOverwriteClip({
+        itemName: p.itemName,
+        startSeconds: p.startSeconds,
+        durationSeconds: p.durationSeconds,
+        videoTrackIndex: p.videoTrackIndex != null ? p.videoTrackIndex : 0,
+        audioTrackIndex: p.audioTrackIndex != null ? p.audioTrackIndex : 0,
+        mode: p.mode === "insert" ? "insert" : "overwrite"
+      }, log);
+      results.push({ index: i, ...r });
+      if (log) log(`Placement ${i}: "${p.itemName}" @ ${p.startSeconds}s → OK`);
+    } catch (e) {
+      const err = String(e && e.message || e);
+      failed.push({ index: i, itemName: p.itemName, startSeconds: p.startSeconds, error: err });
+      if (log) log(`Placement ${i} LỖI: ${err}`, "warn");
+    }
+  }
+  return { total: placements.length, placed: results.length, failed };
+}
+
 async function duplicateClip({ offsetSeconds = 1, videoTrackOffset = 0, audioTrackOffset = 0, alignToVideo = true }, log) {
   const { project, sequence, clip } = await getActiveSequenceAndSelection(log || function () {});
 
