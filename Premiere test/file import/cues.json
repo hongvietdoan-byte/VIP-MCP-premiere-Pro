@@ -1,0 +1,462 @@
+{
+  "sourceDocx": "FFWS_SEA_FALL_2026_Week2.docx",
+  "generatedAt": "2026-09-10T12:04:48.766Z",
+  "cueCount": 65,
+  "cues": [
+    {
+      "index": 0,
+      "start": 0.2,
+      "end": 1.333,
+      "text": "I think we can see them , guys.",
+      "image": "ảnh 1.png"
+    },
+    {
+      "index": 1,
+      "start": 1.4,
+      "end": 2.2,
+      "text": "Drop down.",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 2,
+      "start": 2.633,
+      "end": 3.133,
+      "text": "Yeah, we can see them from down here.",
+      "image": "ảnh 1.png"
+    },
+    {
+      "index": 3,
+      "start": 3.133,
+      "end": 3.366,
+      "text": "Break the Gloo Wall.",
+      "image": "ảnh 3.png"
+    },
+    {
+      "index": 4,
+      "start": 4.266,
+      "end": 5.5,
+      "text": "Wait, do we have a good angle from down here?",
+      "image": "ảnh 4.png"
+    },
+    {
+      "index": 5,
+      "start": 5.566,
+      "end": 6.766,
+      "text": "Three of them are weak, guys.",
+      "image": "ảnh 1.png"
+    },
+    {
+      "index": 6,
+      "start": 6.9,
+      "end": 8.566,
+      "text": "Break it, we can break it from here.",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 7,
+      "start": 8.766,
+      "end": 9.6,
+      "text": "Knocked one, confirm him.",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 8,
+      "start": 10.533,
+      "end": 11.833,
+      "text": "Those guys are fighting each other.",
+      "image": "ảnh 3.png"
+    },
+    {
+      "index": 9,
+      "start": 12.166,
+      "end": 13.1,
+      "text": "Yo, let's go now, guys.",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 10,
+      "start": 13.366,
+      "end": 13.9,
+      "text": "Go right.",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 11,
+      "start": 14,
+      "end": 14.9,
+      "text": "Rotate right.",
+      "image": "ảnh 4.png"
+    },
+    {
+      "index": 12,
+      "start": 14.966,
+      "end": 15.566,
+      "text": "Rotate right.",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 13,
+      "start": 15.633,
+      "end": 16.166,
+      "text": "Rotate right, come to me.",
+      "image": "ảnh 4.png"
+    },
+    {
+      "index": 14,
+      "start": 16.533,
+      "end": 17.3,
+      "text": "Sniper behind the rock",
+      "image": "ảnh 4.png"
+    },
+    {
+      "index": 15,
+      "start": 17.3,
+      "end": 18.433,
+      "text": "Two left.",
+      "image": "ảnh 1.png"
+    },
+    {
+      "index": 16,
+      "start": 19.4,
+      "end": 20.4,
+      "text": "Sniper bendind the rock. Get ready for a 4v4.",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 17,
+      "start": 20.5,
+      "end": 21.3,
+      "text": "Sniper is in front of me, ABCD.",
+      "image": "ảnh 4.png"
+    },
+    {
+      "index": 18,
+      "start": 21.3,
+      "end": 22.033,
+      "text": "Catch him, Catch him.",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 19,
+      "start": 22.133,
+      "end": 22.633,
+      "text": "Push him, MinkCuog goooo",
+      "image": "ảnh 1.png"
+    },
+    {
+      "index": 20,
+      "start": 22.633,
+      "end": 23.066,
+      "text": "Push him now.",
+      "image": "ảnh 3.png"
+    },
+    {
+      "index": 21,
+      "start": 23.066,
+      "end": 23.433,
+      "text": "Go on MinkCuog.",
+      "image": "ảnh 1.png"
+    },
+    {
+      "index": 22,
+      "start": 23.766,
+      "end": 24.233,
+      "text": "Push him, push!",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 23,
+      "start": 25.166,
+      "end": 25.566,
+      "text": "Go for Oscar.",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 24,
+      "start": 25.566,
+      "end": 25.8,
+      "text": "Wait.",
+      "image": "ảnh 3.png"
+    },
+    {
+      "index": 25,
+      "start": 27.033,
+      "end": 27.766,
+      "text": "Wait, he's backing up.",
+      "image": "ảnh 1.png"
+    },
+    {
+      "index": 26,
+      "start": 28.2,
+      "end": 28.966,
+      "text": "He's weak, he's weak.",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 27,
+      "start": 29.233,
+      "end": 29.666,
+      "text": "Oscar .",
+      "image": "ảnh 1.png"
+    },
+    {
+      "index": 28,
+      "start": 29.866,
+      "end": 30.766,
+      "text": "Okay, okay, there's still one on the other side.",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 29,
+      "start": 31.133,
+      "end": 31.633,
+      "text": "I used Oscar.",
+      "image": "ảnh 1.png"
+    },
+    {
+      "index": 30,
+      "start": 31.833,
+      "end": 33,
+      "text": "They're fighting on the other side.",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 31,
+      "start": 33,
+      "end": 34.4,
+      "text": "Let's go, ABCD!",
+      "image": "ảnh 4.png"
+    },
+    {
+      "index": 32,
+      "start": 35.9,
+      "end": 37.4,
+      "text": "Need an M590? Come to me, I'll give you one.",
+      "image": "ảnh 3.png"
+    },
+    {
+      "index": 33,
+      "start": 39.066,
+      "end": 39.566,
+      "text": "Take it slow.",
+      "image": "ảnh 1.png"
+    },
+    {
+      "index": 34,
+      "start": 39.866,
+      "end": 40.866,
+      "text": "One is weak.",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 35,
+      "start": 41.033,
+      "end": 41.566,
+      "text": "I am coming",
+      "image": "ảnh 1.png"
+    },
+    {
+      "index": 36,
+      "start": 41.566,
+      "end": 42.366,
+      "text": "Only three left.",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 37,
+      "start": 42.5,
+      "end": 43.1,
+      "text": "Already done",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 38,
+      "start": 43.1,
+      "end": 44.4,
+      "text": "There are M590s everywhere, bro.",
+      "image": "ảnh 3.png"
+    },
+    {
+      "index": 39,
+      "start": 44.5,
+      "end": 45.7,
+      "text": "Okay, I'll take the M590. Give me a sec.",
+      "image": null
+    },
+    {
+      "index": 40,
+      "start": 45.7,
+      "end": 46.533,
+      "text": "Morse is right next to us.",
+      "image": "ảnh 4.png"
+    },
+    {
+      "index": 41,
+      "start": 46.766,
+      "end": 48,
+      "text": "Clear, only two left.",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 42,
+      "start": 48,
+      "end": 48.666,
+      "text": "Let's go, guys!",
+      "image": "ảnh 4.png"
+    },
+    {
+      "index": 43,
+      "start": 49.1,
+      "end": 50.133,
+      "text": "Let's fight.",
+      "image": "ảnh 3.png"
+    },
+    {
+      "index": 44,
+      "start": 50.133,
+      "end": 51.433,
+      "text": "Have UAV heal, let's push him now.",
+      "image": "ảnh 1.png"
+    },
+    {
+      "index": 45,
+      "start": 51.833,
+      "end": 52.466,
+      "text": "Here is UAV heal",
+      "image": "ảnh 3.png"
+    },
+    {
+      "index": 46,
+      "start": 52.7,
+      "end": 53.733,
+      "text": "Anyone drive the car? Let's go with car",
+      "image": "ảnh 1.png"
+    },
+    {
+      "index": 47,
+      "start": 53.8,
+      "end": 54.2,
+      "text": "Wait, wait.",
+      "image": "ảnh 3.png"
+    },
+    {
+      "index": 48,
+      "start": 54.266,
+      "end": 54.733,
+      "text": "Nice, nice.",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 49,
+      "start": 54.733,
+      "end": 55.2,
+      "text": "100 HP.",
+      "image": "ảnh 4.png"
+    },
+    {
+      "index": 50,
+      "start": 55.9,
+      "end": 56.366,
+      "text": "Morse there.",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 51,
+      "start": 56.633,
+      "end": 57.1,
+      "text": "Another 100 HP.",
+      "image": "ảnh 4.png"
+    },
+    {
+      "index": 52,
+      "start": 57.3,
+      "end": 57.6,
+      "text": "One is weak.",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 53,
+      "start": 57.766,
+      "end": 58.166,
+      "text": "Nice!",
+      "image": "ảnh 3.png"
+    },
+    {
+      "index": 54,
+      "start": 58.866,
+      "end": 59.533,
+      "text": "Fall back right.",
+      "image": "ảnh 1.png"
+    },
+    {
+      "index": 55,
+      "start": 59.533,
+      "end": 61.5,
+      "text": "They confimed me, two of them are inside Gloo Wall.",
+      "image": "ảnh 3.png"
+    },
+    {
+      "index": 56,
+      "start": 61.733,
+      "end": 62.4,
+      "text": "That's right, ABCD.",
+      "image": "ảnh 4.png"
+    },
+    {
+      "index": 57,
+      "start": 63.633,
+      "end": 64.3,
+      "text": "They're stacked on top of each other.",
+      "image": "ảnh 3.png"
+    },
+    {
+      "index": 58,
+      "start": 64.866,
+      "end": 65.3,
+      "text": "It's done.",
+      "image": "ảnh 3.png"
+    },
+    {
+      "index": 59,
+      "start": 65.3,
+      "end": 65.966,
+      "text": "Nice",
+      "image": "ảnh 3.png"
+    },
+    {
+      "index": 60,
+      "start": 66.6,
+      "end": 67.266,
+      "text": "Only one left.",
+      "image": "ảnh 3.png"
+    },
+    {
+      "index": 61,
+      "start": 67.4,
+      "end": 67.7,
+      "text": "Break Gloo Wall.",
+      "image": "ảnh 1.png"
+    },
+    {
+      "index": 62,
+      "start": 69.033,
+      "end": 69.7,
+      "text": "He's weak.",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 63,
+      "start": 69.833,
+      "end": 71.433,
+      "text": "Let's gooooo!",
+      "image": "ảnh 2.png"
+    },
+    {
+      "index": 64,
+      "start": 72.566,
+      "end": 73.7,
+      "text": "We're playing so damn well, guys!",
+      "image": "ảnh 4.png"
+    }
+  ]
+}
