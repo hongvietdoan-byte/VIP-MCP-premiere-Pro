@@ -769,6 +769,13 @@ async function _cmdDebugProbeApi() {
     const p = _ppro.Sequence && _ppro.Sequence.prototype;
     return (p && typeof p.createCaptionTrack === "function") ? "có" : "KHÔNG có";
   });
+  // LƯU Ý 2026-09-10 (kết luận điều tra SRT→Caption Track, xem TODO.md): đã probe trực tiếp và xác
+  // nhận: (1) không có API command/menu execution nào trong module premierepro — loại phương án
+  // command automation; (2) SequenceEditor.createInsertProjectItemAction() với SRT ProjectItem
+  // KHÔNG tạo/tăng caption track (test qua getCaptionTrackCount() trước/sau) — loại phương án
+  // generic insert. Đường duy nhất tạo native Caption Track thật vẫn là kéo tay SRT từ Project
+  // panel vào timeline (Premiere tự làm) — đã xác nhận hoạt động (sequence FFWS SEA Fall 2026 Week2
+  // có 65 caption item khớp đúng số cue SRT).
 
   // Đọc trạng thái clip đang chọn nếu có — không bắt buộc phải chọn gì
   try {
