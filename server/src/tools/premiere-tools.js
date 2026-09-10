@@ -1151,13 +1151,16 @@ export const PREMIERE_TOOLS = [
 
   {
     name: 'create_sequence',
-    description: 'Tạo sequence mới trong project đang mở. Có thể tạo rỗng hoặc từ item đang chọn trong Project panel (fromSelectedMedia=true). Timebase mặc định 60fps.',
+    description: 'Tạo sequence mới trong project đang mở. Mặc định (timebase=60) nhân bản từ 1 trong 2 sequence template có sẵn trong project ("Template Youtube 1920x1080 60fps" / "Template Tiktok 1080x1920 60fps") để đảm bảo đúng 60fps thật — Premiere API không có cách set frame rate tuỳ ý qua script. Có thể tạo từ item đang chọn trong Project panel (fromSelectedMedia=true), khi đó bỏ qua template.',
     inputSchema: {
       type: 'object',
       properties: {
         name: { type: 'string', description: 'Tên sequence mới.' },
-        fromSelectedMedia: { type: 'boolean', description: 'true = tạo sequence từ (các) item đang chọn trong Project panel. Mặc định false (sequence rỗng).' },
-        timebase: { type: 'number', description: 'Timebase (frame rate) của sequence, đơn vị fps. Mặc định 60.' }
+        fromSelectedMedia: { type: 'boolean', description: 'true = tạo sequence từ (các) item đang chọn trong Project panel (bỏ qua template/timebase). Mặc định false.' },
+        timebase: { type: 'number', description: 'Timebase (fps) mong muốn. Mặc định 60 — dùng template để đảm bảo đúng. Giá trị khác 60 sẽ tạo sequence trắng và KHÔNG đảm bảo fps (Premiere API không hỗ trợ set tuỳ ý).' },
+        orientation: { type: 'string', enum: ['landscape', 'portrait'], description: 'Chọn template theo hướng khung hình: "landscape" = 1920x1080 (Youtube), "portrait" = 1080x1920 (Tiktok). Mặc định "landscape". Chỉ áp dụng khi timebase=60.' },
+        frameWidth: { type: 'number', description: 'Đổi lại chiều rộng khung hình sau khi nhân bản template (nếu khác kích thước mặc định của template). Cần truyền kèm frameHeight.' },
+        frameHeight: { type: 'number', description: 'Đổi lại chiều cao khung hình sau khi nhân bản template. Cần truyền kèm frameWidth.' }
       },
       required: ['name']
     },

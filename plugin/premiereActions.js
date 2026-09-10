@@ -3281,78 +3281,194 @@ async function duplicateClip({ offsetSeconds = 1, videoTrackOffset = 0, audioTra
   };
 }
 
-async function createSequence({ name, fromSelectedMedia = false, timebase = 60 }) {
+// LƯU Ý 2026-09-10: đã live-test kỹ — bản Premiere này (25.6.4) KHÔNG có cách nào set frame
+// rate/timebase qua script khi tạo sequence trắng:
+// 1) SequenceSettings không có getVideoFrameRate/setVideoFrameRate (dù docs Adobe online liệt kê
+//    "since 25.6"). Prototype thật chỉ có: getMaximumBitDepth, setMaxRenderQuality,
+//    getAudioSampleRate/setAudioSampleRate, getVideoDisplayFormat/setVideoDisplayFormat,
+//    getVideoFieldType/setVideoFieldType, getVideoFrameRect/setVideoFrameRect (kích thước khung
+//    hình — CÓ hoạt động, dùng để đổi resolution), getVideoPixelAspectRatio/setVideoPixelAspectRatio,
+//    getCompositeInLinearColor, getEditingMode/setEditingMode, getPreview*.
+// 2) Project.createSequence chỉ nhận (name) — không có overload presetPath, và không có
+//    createSequenceWithPresetPath nào cả (đã enumerate toàn bộ prototype của Project: chỉ có
+//    createSequence/createSequenceFromMedia, không có API preset nào khác).
+// => GIẢI PHÁP (theo yêu cầu user 2026-09-10): user tự tạo tay 2 sequence template trong project,
+// mỗi cái set Sequence Settings = 60fps 1 lần qua UI Premiere: "Template Youtube 1920x1080 60fps"
+// và "Template Tiktok 1080x1920 60fps". create_sequence giờ LUÔN nhân bản (createCloneAction, giữ
+// nguyên mọi settings gốc kể cả timebase) từ 1 trong 2 template này theo orientation, rồi đổi tên
+// sequence mới sang `name` (qua projectItem.createSetNameAction), rồi nếu có frameWidth/frameHeight
+// khác kích thước template thì set lại qua setVideoFrameRect (đã xác nhận hoạt động) — timebase giữ
+// nguyên 60fps vì không đụng tới phần đó. Vì 2 template sống trong file .prproj đã commit vào git,
+// máy khác `git pull` về là có sẵn, không cần tạo tay lại (nhưng .prproj là file nhị phân — mỗi lần
+// sửa sẽ tạo diff nhị phân trong git history).
+const CREATE_SEQUENCE_TEMPLATES = {
+  landscape: "Template Youtube 1920x1080 60fps",
+  portrait: "Template Tiktok 1080x1920 60fps"
+};
+
+async function createSequence({ name, fromSelectedMedia = false, timebase = 60, orientation = "landscape", frameWidth, frameHeight }) {
   if (!name) throw new Error("Phải truyền name cho sequence mới.");
   const project = await ppro.Project.getActiveProject();
   if (!project) throw new Error("Không tìm thấy project đang mở.");
 
-  const before = await project.getSequences();
-  const beforeNames = new Set();
-  for (const s of (before || [])) { try { beforeNames.add(s.name || (await s.getName())); } catch {} }
-
-  // LƯU Ý 2026-09-10: project.createSequence() THỰC RA HOẠT ĐỘNG ĐÚNG — lần trước tưởng nhầm là
-  // no-op vì bước verify dùng s.getName() (sai, method này không tồn tại trên Sequence, đúng phải
-  // là property s.name) nên luôn không tìm thấy sequence mới, dù nó đã được tạo thật. Đã fix.
+  // fromSelectedMedia: giữ nguyên hành vi cũ (tạo từ media Project panel), không đi qua template —
+  // timebase trong trường hợp này theo media nguồn, không đảm bảo 60fps.
   if (fromSelectedMedia) {
     const items = await getSelectedProjectItemsForSequence(project);
     if (!items || items.length === 0) throw new Error("fromSelectedMedia=true nhưng không có item nào đang chọn trong Project panel.");
+
+    const before = await project.getSequences();
+    const beforeNames = new Set();
+    for (const s of (before || [])) { try { beforeNames.add(s.name || (await s.getName())); } catch {} }
+
     await project.createSequenceFromMedia(name, items);
-  } else {
+
+    const afterList = (await project.getSequences()) || [];
+    let confirmedName = null;
+    for (const s of afterList) {
+      let n = null;
+      try { n = s.name || (await s.getName()); } catch {}
+      if (n != null && !beforeNames.has(n)) { confirmedName = n; break; }
+    }
+    if (confirmedName == null) {
+      throw new Error("createSequenceFromMedia() đã chạy nhưng không tìm thấy sequence mới — không xác nhận được tạo thành công.");
+    }
+    return { created: true, name: confirmedName, fromSelectedMedia: true, method: "fromSelectedMedia", timebaseApplied: false };
+  }
+
+  // timebase khác 60 (hoặc 0/false/null) → không dùng template, quay lại tạo sequence trắng như cũ,
+  // không đảm bảo timebase gì (script không set được).
+  if (!timebase || timebase !== 60) {
+    const before = await project.getSequences();
+    const beforeNames = new Set();
+    for (const s of (before || [])) { try { beforeNames.add(s.name || (await s.getName())); } catch {} }
+
     await project.createSequence(name);
+
+    const afterList = (await project.getSequences()) || [];
+    let confirmedName = null;
+    for (const s of afterList) {
+      let n = null;
+      try { n = s.name || (await s.getName()); } catch {}
+      if (n != null && !beforeNames.has(n)) { confirmedName = n; break; }
+    }
+    if (confirmedName == null) {
+      throw new Error("createSequence() đã chạy nhưng không tìm thấy sequence mới — không xác nhận được tạo thành công.");
+    }
+    return {
+      created: true, name: confirmedName, fromSelectedMedia: false, method: "blank",
+      timebase, timebaseApplied: false,
+      timebaseError: "timebase khác 60 nên không dùng template — script không có API set timebase tuỳ ý, sequence giữ nguyên mặc định của Premiere."
+    };
   }
 
-  const afterList = (await project.getSequences()) || [];
-  let confirmedName = null;
+  // Đường chính: clone từ template 60fps theo orientation.
+  const templateName = CREATE_SEQUENCE_TEMPLATES[orientation] || CREATE_SEQUENCE_TEMPLATES.landscape;
+  const allSeq = (await project.getSequences()) || [];
+  let templateSeq = null;
+  for (const s of allSeq) {
+    try { if ((s.name || (await s.getName())) === templateName) { templateSeq = s; break; } } catch {}
+  }
+  if (!templateSeq) {
+    throw new Error(
+      `Không tìm thấy template "${templateName}" trong project. Cần tạo tay 1 sequence tên đúng như vậy ` +
+      `và set Sequence Settings = 60fps qua UI Premiere 1 lần trước khi dùng create_sequence.`
+    );
+  }
+  if (typeof templateSeq.createCloneAction !== "function") {
+    throw new Error("Sequence.createCloneAction() không khả dụng — không nhân bản được template.");
+  }
+
+  const beforeNames = new Set();
+  for (const s of allSeq) { try { beforeNames.add(s.name || (await s.getName())); } catch {} }
+
+  let ok;
+  await project.lockedAccess(() => {
+    ok = project.executeTransaction((compoundAction) => {
+      compoundAction.addAction(templateSeq.createCloneAction());
+    }, `Clone template "${templateName}" qua MCP`);
+  });
+  if (!ok) throw new Error("executeTransaction trả về false khi clone template.");
+
+  const afterClone = (await project.getSequences()) || [];
   let newSequence = null;
-  for (const s of afterList) {
-    let n = null;
-    try { n = s.name || (await s.getName()); } catch {}
-    if (n != null && !beforeNames.has(n)) { confirmedName = n; newSequence = s; break; }
+  for (const s of afterClone) {
+    try {
+      const n = s.name || (await s.getName());
+      if (n != null && !beforeNames.has(n)) { newSequence = s; break; }
+    } catch {}
   }
-  if (confirmedName == null) {
-    throw new Error("createSequence() đã chạy nhưng không tìm thấy sequence mới trong danh sách sau đó — không xác nhận được có thực sự tạo thành công không.");
+  if (!newSequence) {
+    throw new Error("Clone template thành công nhưng không tìm thấy sequence mới trong danh sách sau đó.");
   }
 
-  // LƯU Ý 2026-09-10: đã live-test kỹ — bản Premiere này KHÔNG có cách nào set frame rate/timebase
-  // qua script:
-  // 1) SequenceSettings không có getVideoFrameRate/setVideoFrameRate (dù docs Adobe online liệt kê
-  //    "since 25.6"). Prototype thật chỉ có: getMaximumBitDepth, setMaxRenderQuality,
-  //    getAudioSampleRate/setAudioSampleRate, getVideoDisplayFormat/setVideoDisplayFormat,
-  //    getVideoFieldType/setVideoFieldType, getVideoFrameRect/setVideoFrameRect (kích thước khung
-  //    hình, KHÔNG phải frame rate), getVideoPixelAspectRatio/setVideoPixelAspectRatio,
-  //    getCompositeInLinearColor, getEditingMode/setEditingMode, getPreview*.
-  // 2) Project.createSequence chỉ nhận (name) — không có overload presetPath, và không có
-  //    createSequenceWithPresetPath nào cả (đã enumerate toàn bộ prototype của Project: chỉ có
-  //    createSequence/createSequenceFromMedia, không có API preset nào khác).
-  // => Timebase/frame rate của sequence mới HOÀN TOÀN nằm ngoài khả năng script ở bản Premiere này.
-  // Vẫn giữ đoạn dò setVideoFrameRate bên dưới phòng khi Adobe bổ sung ở bản Premiere mới hơn, báo
-  // lỗi rõ ràng nếu không có. Workaround thực tế duy nhất: user tự tạo TAY 1 sequence 60fps làm
-  // template 1 lần trong Premiere, sau đó dùng duplicate_sequence(sourceSequenceName=<template>) để
-  // nhân bản (createCloneAction giữ nguyên settings gốc, kể cả timebase) thay vì create_sequence.
-  let timebaseApplied = false;
-  let timebaseError = null;
-  if (timebase && newSequence) {
+  // Đổi tên sequence mới sang `name` yêu cầu.
+  let renamed = false;
+  let renameError = null;
+  try {
+    const projectItem = await newSequence.getProjectItem();
+    let renameOk;
+    await project.lockedAccess(() => {
+      renameOk = project.executeTransaction((compoundAction) => {
+        compoundAction.addAction(projectItem.createSetNameAction(name));
+      }, `Rename sequence → "${name}" qua MCP`);
+    });
+    renamed = !!renameOk;
+    if (!renameOk) renameError = "executeTransaction trả về false khi đổi tên.";
+  } catch (e) {
+    renameError = String(e && e.message || e);
+  }
+
+  // Đổi frame size nếu có yêu cầu khác kích thước template (giữ nguyên timebase — không đụng phần đó).
+  let frameSizeApplied = null;
+  let frameSizeError = null;
+  if (frameWidth && frameHeight) {
     try {
       const settings = await newSequence.getSettings();
-      if (typeof settings.setVideoFrameRate !== "function") {
-        timebaseError = "SequenceSettings.setVideoFrameRate không tồn tại trong bản Premiere này — chưa có API set timebase trực tiếp. Sequence đã tạo nhưng giữ nguyên timebase mặc định, cần đổi tay trong Premiere (Sequence > Sequence Settings) hoặc dùng preset 60fps khi tạo.";
+      if (typeof settings.setVideoFrameRect !== "function") {
+        frameSizeApplied = false;
+        frameSizeError = "SequenceSettings.setVideoFrameRect không tồn tại trong bản Premiere này.";
       } else {
-        settings.setVideoFrameRate(ppro.FrameRate.createWithValue(timebase));
-        let ok;
+        const rect = await settings.getVideoFrameRect();
+        rect.width = frameWidth;
+        rect.height = frameHeight;
+        settings.setVideoFrameRect(rect);
+        let ok2;
         await project.lockedAccess(() => {
-          ok = project.executeTransaction((compoundAction) => {
+          ok2 = project.executeTransaction((compoundAction) => {
             compoundAction.addAction(newSequence.createSetSettingsAction(settings));
-          }, `Set timebase ${timebase}fps qua MCP`);
+          }, `Set frame size ${frameWidth}x${frameHeight} qua MCP`);
         });
-        timebaseApplied = !!ok;
-        if (!ok) timebaseError = "executeTransaction trả về false khi set timebase.";
+        frameSizeApplied = !!ok2;
+        if (!ok2) frameSizeError = "executeTransaction trả về false khi set frame size.";
       }
     } catch (e) {
-      timebaseError = String(e && e.message || e);
+      frameSizeApplied = false;
+      frameSizeError = String(e && e.message || e);
     }
   }
 
-  return { created: true, name: confirmedName, fromSelectedMedia, timebase, timebaseApplied, timebaseError };
+  let finalName = name;
+  try { finalName = newSequence.name || (await newSequence.getName()) || name; } catch {}
+  let timebaseString = null;
+  try { timebaseString = await newSequence.getTimebase(); } catch {}
+
+  return {
+    created: true,
+    name: finalName,
+    fromSelectedMedia: false,
+    method: "cloneTemplate",
+    fromTemplate: templateName,
+    renamed,
+    renameError,
+    timebase,
+    timebaseApplied: true,
+    timebaseString,
+    frameWidth: frameWidth || null,
+    frameHeight: frameHeight || null,
+    frameSizeApplied,
+    frameSizeError
+  };
 }
 
 // Helper riêng cho createSequence(fromSelectedMedia) — Project panel selection, không phải timeline selection

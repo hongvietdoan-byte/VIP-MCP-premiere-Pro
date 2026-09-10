@@ -370,6 +370,13 @@ async function _cmdGetSequenceInfo() {
     // Gọi getVideoDisplayFormat — timecode format, encode fps
     try { _fpsDebug.videoDisplayFormat = await settings.getVideoDisplayFormat(); } catch (e) { _fpsDebug.vdfErr = e.message; }
     try { _fpsDebug.editingMode = await settings.getEditingMode(); } catch (e) { _fpsDebug.emErr = e.message; }
+    try {
+      const tb = await sequence.getTimebase();
+      _fpsDebug.timebaseRaw = tb;
+      const ticksPerSecond = 254016000000;
+      const tbNum = Number(tb);
+      if (tbNum > 0) _fpsDebug.timebaseFpsGuess = Math.round((ticksPerSecond / tbNum) * 1000) / 1000;
+    } catch (e) { _fpsDebug.tbErr = e.message; }
     // Probe sequence prototype để tìm method fps
     try { _fpsDebug.seqProto = Object.getOwnPropertyNames(Object.getPrototypeOf(sequence)); } catch {}
   } catch (e) { _fpsDebug.outerErr = e.message; }
