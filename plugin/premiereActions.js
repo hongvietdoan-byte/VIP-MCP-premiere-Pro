@@ -3355,6 +3355,11 @@ async function findNewMatchingTrackItem(track, itemName, beforeSignatures) {
 // track item CŨ thay vì tạo item mới, nên không có signature "chưa từng thấy" nào xuất hiện dù
 // overwrite đã áp dụng thật. Trường hợp này, item đã nằm ĐÚNG vị trí sẵn rồi — không cần move, chỉ
 // cần trả về nó để bước set duration vẫn chạy.
+// LƯU Ý: dùng dung sai 0.05s để khớp item — nếu 2 cue CÙNG itemName nằm cách nhau < 0.05s (chưa gặp
+// trong dữ liệu thật đã test, nhưng về lý thuyết có thể xảy ra với cue rất ngắn/dày đặc), hàm này có
+// thể khớp NHẦM sang item liền kề thay vì đúng item tại vị trí yêu cầu. Chưa xử lý (rủi ro thấp với
+// dữ liệu hiện tại — cue gần nhau nhất đã test là ~0.1s), nhưng cần biết nếu debug sai lệch lạ sau
+// này với dữ liệu cue rất dày.
 async function findExistingItemAtPosition(track, itemName, desiredSeconds) {
   if (!track) return null;
   let items;
@@ -3649,6 +3654,82 @@ async function runMicCheckWorkflow({
       "Kéo file SRT tương ứng từ Project panel vào 1 caption track trên timeline (đảm bảo không còn " +
       "caption track cũ nào trước đó, nếu không Premiere có thể giữ track cũ thay vì dùng SRT mới) — " +
       "bước duy nhất chưa tự động hoá được, giới hạn thật của Premiere UXP (xem TODO.md)."
+  };
+}
+
+// Đối chiếu lại timeline (sequence đang active) với cues.json — dùng cho nút "Verify" trong panel.
+// Chỉ verify được clip ảnh trên video track (name/start/end đọc được thật qua UXP) — KHÔNG verify
+// được nội dung text của caption item (CaptionTrackItem không có API đọc text, xem TODO.md mục
+// "caption text styling") nên phần caption chỉ so sánh được SỐ LƯỢNG item, không so được nội dung.
+async function verifyMicCheckWorkflow({ cuesJsonPath, imageVideoTrackIndex = 1 }) {
+  if (!cuesJsonPath) throw new Error("Phải truyền cuesJsonPath.");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  const cuesRaw = await readTextFile(cuesJsonPath);
+  let cuesData;
+  try { cuesData = JSON.parse(cuesRaw); } catch (e) { throw new Error(`Không parse được "${cuesJsonPath}": ${e.message}`); }
+  const allCues = cuesData.cues || [];
+  const imageCues = allCues.filter((c) => c.image);
+
+  const track = await sequence.getVideoTrack(imageVideoTrackIndex);
+  const items = await track.getTrackItems(ppro.Constants.TrackItemType.CLIP, false);
+  const actual = [];
+  for (const it of items) {
+    const e = {};
+    try { e.name = await it.getName(); } catch {}
+    try { e.start = (await it.getStartTime()).seconds; } catch {}
+    try { e.end = (await it.getEndTime()).seconds; } catch {}
+    actual.push(e);
+  }
+
+  const mismatches = [];
+  const count = Math.max(imageCues.length, actual.length);
+  for (let i = 0; i < count; i++) {
+    const expected = imageCues[i];
+    const real = actual[i];
+    if (!expected) {
+      mismatches.push({ index: i, issue: "Clip thừa trên timeline, không có cue tương ứng", actual: real });
+      continue;
+    }
+    if (!real) {
+      mismatches.push({ index: i, issue: "Thiếu clip trên timeline", expected });
+      continue;
+    }
+    const nameOk = real.name === expected.image;
+    const startOk = Math.abs(real.start - expected.start) < 0.05;
+    const endOk = Math.abs(real.end - expected.end) < 0.05;
+    if (!nameOk || !startOk || !endOk) {
+      mismatches.push({ index: i, issue: "Lệch dữ liệu", expected, actual: real, nameOk, startOk, endOk });
+    }
+  }
+
+  let captionTrackCount = 0;
+  let captionItemCount = 0;
+  try {
+    captionTrackCount = await sequence.getCaptionTrackCount();
+    if (captionTrackCount > 0) {
+      const ct = await sequence.getCaptionTrack(0);
+      const citems = await ct.getTrackItems(ppro.Constants.TrackItemType.CLIP, false);
+      captionItemCount = citems.length;
+    }
+  } catch {}
+  const captionCuesExpected = allCues.filter((c) => c.text).length;
+
+  return {
+    imageCuesExpected: imageCues.length,
+    imageClipsFound: actual.length,
+    mismatches,
+    allImagesOk: mismatches.length === 0,
+    captionTrackCount,
+    captionItemCount,
+    captionCuesExpected,
+    captionCountMatches: captionTrackCount > 0 && captionItemCount === captionCuesExpected,
+    captionNote: captionTrackCount === 0
+      ? "Chưa có caption track nào — cần kéo tay file SRT vào timeline."
+      : "Chỉ verify được SỐ LƯỢNG caption item, không verify được nội dung text (giới hạn UXP API)."
   };
 }
 

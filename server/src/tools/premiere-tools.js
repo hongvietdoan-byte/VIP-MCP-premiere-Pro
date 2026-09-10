@@ -1184,6 +1184,22 @@ export const PREMIERE_TOOLS = [
   },
 
   {
+    name: 'verify_mic_check_workflow',
+    description: 'Đối chiếu lại sequence đang active với cues.json — verify từng clip ảnh trên timeline khớp đúng tên/vị trí/thời lượng, và đếm số lượng caption item (không verify được nội dung text caption, giới hạn UXP API). Dùng để kiểm tra sau khi chạy run_mic_check_workflow hoặc sau khi user tự chỉnh tay.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cuesJsonPath: { type: 'string', description: 'Đường dẫn tuyệt đối tới cues.json cần đối chiếu.' },
+        imageVideoTrackIndex: { type: 'number', description: 'Video track chứa ảnh cần verify. Mặc định 1 (V2).' }
+      },
+      required: ['cuesJsonPath']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('verify_mic_check_workflow', args, 30000);
+    }
+  },
+
+  {
     name: 'duplicate_clip',
     description: 'Nhân bản clip đang chọn trên timeline, đặt bản sao lệch đi offsetSeconds về thời gian (và tuỳ chọn lệch track). Verify bằng cách đếm tổng track item trước/sau, không xác định chính xác track item mới bằng identity.',
     inputSchema: {
