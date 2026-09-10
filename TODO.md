@@ -33,12 +33,15 @@ Theo `PLAN_MCP_PREMIERE_SRT_TO_CAPTION_TRACK_DETAILED.docx` (user cung cấp), �
 - `CaptionTrack` class (đọc được qua `sequence.getCaptionTrack(i)`) chỉ có: `getTrackItems`, `setMute`, `getIndex`, `createSetNameAction` — hoàn toàn không có API tạo/insert caption item nào.
 - Dự án hiện tại **chỉ có UXP, không có CEP/ExtendScript bridge** (`plugin/manifest.json` chỉ khai báo UXP panel) — muốn dùng đường ExtendScript phải xây thêm 1 extension CEP riêng chạy song song, là thay đổi kiến trúc lớn, và theo ghi chú cũ trong dự án (`anthropic-skills:premiere-uxp-api`) CEP đang dần gãy tương thích trên Premiere 2026, chỉ nên dùng làm fallback tạm + đánh dấu nợ kỹ thuật, không phải nền tảng chính.
 
-**Kết luận**: với kiến trúc UXP-only hiện tại, KHÔNG có cách nào tạo Native Caption Track từ SRT hoàn toàn qua script. 3 lựa chọn thực tế:
-1. **Giữ nguyên hiện trạng** — `import_srt` + 1 bước kéo tay vào caption track (timing tự động đúng, chỉ 1 thao tác UI).
-2. **Xây CEP/ExtendScript bridge riêng** cho mỗi tính năng `createCaptionTrack` — việc lớn, cần cân nhắc kỹ trước khi làm (đánh đổi nợ kỹ thuật CEP).
-3. **Tiếp tục hướng MOGRT** (mục phía trên) nếu tìm ra được cách set text — vẫn là graphic clip chứ không phải caption track thật, nhưng automate được 100% qua script.
+**Đã loại thêm 2 phương án** theo `PLAN_MCP_PREMIERE_SRT_CAPTION_TRACK_UXP_2026_REVISED.docx` (bản sửa, cùng ngày):
+- **Phương án A — command/menu automation**: đã enumerate TOÀN BỘ top-level module `premierepro` (đầy đủ ~70 class/property) — không có bất kỳ API command/menu execution nào (`Action`/`CompoundAction` chỉ là action-object cho transaction, không phải command dispatcher). **Loại.**
+- **Phương án C — generic `insertProjectItemAction` với SRT ProjectItem**: test trực tiếp theo đúng tiêu chí chấp nhận của tài liệu (`sequence.getCaptionTrackCount()` phải TĂNG) — gọi xong không throw nhưng **count không đổi** (1→1). **Loại chính thức, không chỉ vì đoán.**
 
-Chưa quyết định hướng — cần user chọn trước khi làm tiếp.
+**Kết luận cuối**: với kiến trúc UXP-only hiện tại (không CEP/ExtendScript), KHÔNG có cách nào tạo Native Caption Track từ SRT hoàn toàn qua script.
+
+**Tin tốt**: trong lúc điều tra, phát hiện sequence `FFWS SEA Fall 2026 Week2` đã có sẵn 1 caption track với **65 item — khớp chính xác** số cue trong file SRT. Nghĩa là bước kéo tay (Phương án B — GUI drag/drop, do user tự làm thủ công chứ không qua automation) đã thực hiện thành công, timing tự động đúng 100% như kỳ vọng. Đây là bằng chứng thực tế rằng phương án "giữ nguyên, kéo tay 1 bước" hoạt động tốt trong thực tế, không chỉ là lý thuyết.
+
+**Quyết định**: dừng ở đây, không tiếp tục Phương án B tự động hoá bằng GUI automation (rủi ro cao, user đã cân nhắc và không chọn) hay xây CEP bridge (việc lớn, chưa cần thiết vì đường kéo tay đã đủ dùng). Có thể tiếp tục hướng MOGRT (mục phía trên) nếu sau này cần tự động hoá text 100%, nhưng không phải ưu tiên hiện tại.
 
 ## ✅ Ưu tiên 1 — `insert_clip` / `overwrite_clip` đặt sai vị trí — ĐÃ FIX, LIVE-TESTED 2026-09-10
 
