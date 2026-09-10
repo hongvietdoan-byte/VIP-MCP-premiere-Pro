@@ -23,10 +23,18 @@
   #micCheckActions button.primary { background: #2d6cdf; border-color: #2d6cdf; }
   #micCheckActions button.primary:hover { background: #3a7bf0; }
   #micCheckActions button:disabled { opacity: 0.5; cursor: default; }
-  #mcSequenceName, #mcOrientation { background: #2a2a2d; color: #e4e4e8; border: 1px solid #555;
-    border-radius: 3px; padding: 3px 6px; font-size: 10px; flex: 1; }
+  #mcSequenceName, #mcOrientation, .mc-row select { background: #2a2a2d; color: #e4e4e8;
+    border: 1px solid #555; border-radius: 3px; padding: 3px 6px; font-size: 10px; flex: 1; }
   #mcLog { margin-top: 8px; max-height: 140px; overflow-y: auto; background: #141416;
     border-radius: 3px; padding: 6px; font-size: 10px; line-height: 1.5; white-space: pre-wrap; }
+  #mcDetected { background: #232326; border-radius: 3px; padding: 6px 8px; margin-bottom: 6px;
+    font-size: 10px; color: #aaa; }
+  #mcDetected .mc-detected-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+  #mcDetected .mc-detected-row:last-child { margin-bottom: 0; }
+  #mcDetected .mc-detected-icon { width: 14px; flex-shrink: 0; text-align: center; }
+  #mcDetected .mc-ok { color: #6cd67a; }
+  #mcDetected .mc-warn { color: #e0b846; }
+  #mcDetected .mc-err { color: #e06060; }
 </style>
 </head>
 <body>
@@ -36,20 +44,11 @@
   <div id="micCheck">
     <h4>Mic Check</h4>
     <div class="mc-row">
-      <label>cues.json</label>
-      <span class="mc-val" id="mcCuesPath">(chưa chọn)</span>
-      <button id="mcPickCues">Chọn</button>
+      <label>Thư mục dự án</label>
+      <span class="mc-val" id="mcFolderPath">(chưa chọn)</span>
+      <button id="mcPickFolder">Chọn</button>
     </div>
-    <div class="mc-row">
-      <label>Video nền</label>
-      <span class="mc-val" id="mcVideoPath">(tuỳ chọn)</span>
-      <button id="mcPickVideo">Chọn</button>
-    </div>
-    <div class="mc-row">
-      <label>Thư mục ảnh</label>
-      <span class="mc-val" id="mcImagesPath">(chưa chọn)</span>
-      <button id="mcPickImages">Chọn</button>
-    </div>
+    <div id="mcDetected" class="mc-detected"></div>
     <div class="mc-row">
       <label>Tên sequence</label>
       <input type="text" id="mcSequenceName" placeholder="vd: FFWS Week2">
