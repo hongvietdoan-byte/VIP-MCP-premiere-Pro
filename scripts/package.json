@@ -1,0 +1,9 @@
+{
+  "name": "premiere-mcp-scripts",
+  "version": "1.0.0",
+  "description": "Standalone CLI tools for Mic Check workflow prep — run outside Premiere, no UXP dependency",
+  "type": "module",
+  "dependencies": {
+    "adm-zip": "^0.6.0"
+  }
+}
