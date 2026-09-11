@@ -1129,6 +1129,8 @@ async function _cmdDebugInspectChain(params, log) {
         el.style.color = ok ? "#4caf50" : "#888";
       }
     });
+    const verEl = document.getElementById("pluginVersion");
+    if (verEl) verEl.textContent = `v${PLUGIN_VERSION}`;
     initMcpBridge(window.beatShakeState || {});
   } catch (e) {
     // Bridge init failed — plugin still works normally via UI
