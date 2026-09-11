@@ -2063,6 +2063,25 @@ async function debugTestTransformKeyframe({ matchName = "AE.ADBE Motion", paramN
   const clipInPoint = await clip.getInPoint();
   log(`clipInPoint = ${clipInPoint.seconds.toFixed(3)}s`);
 
+  // Probe tạm — kiểm tra xem getValueAtTime() có đọc lại được giá trị THẬT hiện tại của param
+  // hay không (để trả lời câu hỏi: có thể đồng bộ ngược Premiere -> panel không).
+  let readProbe = null;
+  try {
+    if (typeof param.getValueAtTime === "function") {
+      const raw = await param.getValueAtTime(clipInPoint);
+      readProbe = { raw: JSON.stringify(raw), unwrapped: JSON.stringify(unwrapParamValue(raw)) };
+    } else {
+      readProbe = { error: "getValueAtTime không tồn tại trên param này" };
+    }
+  } catch (e) {
+    readProbe = { error: e.message };
+  }
+  log(`readProbe (getValueAtTime tại clipInPoint): ${JSON.stringify(readProbe)}`);
+
+  if (x == null && y == null && value == null) {
+    return { readOnly: true, matchName, paramName, clipInPoint: clipInPoint.seconds, readProbe };
+  }
+
   let kfValue;
   let valueDescription;
   let diag = {};
