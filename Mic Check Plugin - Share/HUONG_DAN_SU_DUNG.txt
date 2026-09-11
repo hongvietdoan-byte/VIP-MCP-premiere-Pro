@@ -1,0 +1,157 @@
+===============================================================
+  MIC CHECK — PLUGIN TU DONG DUNG TIMELINE CHO PREMIERE PRO
+===============================================================
+
+Plugin nay giup tu dong dung 1 timeline gom: video nen + anh nhan
+vat + phu de (caption), dong bo dung theo tung moc thoi gian, chi
+tu 1 file Word (.docx) va cac anh nhan vat.
+
+KHONG can cai Python, khong can Claude, khong can mang internet.
+Chi can Premiere Pro va Creative Cloud Desktop.
+
+---------------------------------------------------------------
+DIEU KIEN TRUOC KHI DUNG
+---------------------------------------------------------------
+1. May da cai Adobe Premiere Pro ban 26.2 tro len (ban nam 2026,
+   tu thang 2/2026). Neu Premiere cu hon, can mo Creative Cloud
+   Desktop de cap nhat len ban moi nhat truoc.
+2. May da cai va dang nhap san Adobe Creative Cloud Desktop.
+
+(Khong can cai Python hay bat ky phan mem nao khac.)
+
+---------------------------------------------------------------
+BUOC 1 — CAI PLUGIN VAO PREMIERE (chi lam 1 lan)
+---------------------------------------------------------------
+1. Double-click vao file "MicCheck.ccx" (nam cung thu muc voi
+   file huong dan nay).
+2. Creative Cloud Desktop se tu mo len va tu cai plugin — khong
+   can lam gi them, cho vai giay.
+3. Mo (hoac khoi dong lai) Premiere Pro.
+4. Vao menu: Window > Extensions > Mic Check de mo panel plugin.
+   Neu thay panel "Mic Check" hien ra la cai thanh cong.
+
+---------------------------------------------------------------
+BUOC 2 — CHUAN BI FILE WORD (.docx)
+---------------------------------------------------------------
+Tao 1 file Word co 1 bang gom dung 4 cot theo thu tu, DAT TEN COT
+CHINH XAC nhu sau (khong sai chinh ta, khong thieu dau):
+
+    Time Stamp | Player | EN | Anh
+
+Vi du 1 dong trong bang:
+    00:00:00,200 --> 00:00:01,333 | Caster A | I think we can
+    see them, guys. | Anh 1
+
+Giai thich:
+  - Time Stamp: khoang thoi gian bat dau --> ket thuc, dung dinh
+    dang gio:phut:giay,mili giay (giong dinh dang phu de SRT).
+  - Player: ten nguoi noi (khong bat buoc dung, chi de tham khao).
+  - EN: noi dung cau phu de se hien tren video.
+  - Anh: ten anh se hien len o moc thoi gian do — vi du go
+    "Anh 1" thi plugin se tu tim file anh ten "anh 1.png" (hoac
+    .jpg/.jpeg) trong cung thu muc.
+
+Chuan bi them trong CUNG 1 THU MUC voi file .docx:
+  - Cac file anh duoc nhac toi trong bang (vi du: anh 1.png,
+    anh 2.png, anh 3.png...).
+  - (Khong bat buoc) 1 file video nen (.mp4/.mov/.mxf/.avi).
+
+---------------------------------------------------------------
+BUOC 3 — CHUYEN FILE WORD SANG DINH DANG PLUGIN DOC DUOC
+---------------------------------------------------------------
+1. Mo thu muc "Cong Cu Doi File Word" (di kem trong goi nay).
+2. KEO va THA file .docx vua chuan bi o Buoc 2 vao bieu tuong
+   file "Chuyen_Doi_Mic_Check.bat" (khong duoc mo file .bat truoc,
+   chi keo file .docx tha thang vao no).
+3. Mot cua so den hien ra chay vai giay roi bao "Xong!".
+4. Kiem tra lai trong thu muc chua file .docx — se thay xuat hien
+   2 file moi: "<ten file>.cues.json" va "<ten file>.srt". Day la
+   2 file plugin se dung o buoc tiep theo.
+
+Neu bao loi "Thieu anh": kiem tra lai ten file anh co dung khop
+voi cot "Anh" trong bang Word khong (vi du bang ghi "Anh 3" thi
+phai co file "anh 3.png" hoac "anh 3.jpg" trong thu muc).
+
+---------------------------------------------------------------
+BUOC 4 — CHAY MIC CHECK TRONG PREMIERE
+---------------------------------------------------------------
+1. Mo mot Project Premiere bat ky (hoac tao moi).
+2. Mo panel "Mic Check" (Window > Extensions > Mic Check).
+3. Bam nut "Chon" > chon THU MUC chua file .cues.json + anh (+
+   video nen, .srt neu co). Plugin se tu do va bao so luong file
+   tim thay.
+4. Neu co nhieu hon 1 file cues.json hoac video hoac srt trong
+   thu muc, plugin se hien dropdown cho chon dung file.
+5. Dien "Ten sequence" (plugin tu goi y san theo ten file docx).
+6. Chon "Huong khung hinh": Landscape (ngang, 1920x1080) hoac
+   Portrait (doc, 1080x1920).
+7. Bam nut "Chay Mic Check". Doi den khi thay bao "Xong" — plugin
+   se tu:
+     - Tao 1 sequence moi, 60fps, dung huong da chon.
+     - Import video nen + file phu de (.srt) + toan bo anh vao
+       Project panel.
+     - Tu dat video nen va tung anh len timeline dung thoi diem
+       va thoi luong theo file .cues.json.
+
+Luu y: neu co nhieu anh (50 anh tro len), qua trinh nay co the
+mat vai chuc giay — KHONG thao tac gi vao Premiere trong luc doi.
+
+---------------------------------------------------------------
+BUOC 5 — KIEM TRA LAI (VERIFY)
+---------------------------------------------------------------
+Bam nut "Verify" trong panel de plugin tu doi chieu lai timeline
+vua dung voi du lieu goc, bao ro anh nao dung vi tri / anh nao bi
+lech (neu co).
+
+---------------------------------------------------------------
+BUOC 6 — THEM PHU DE VAO TIMELINE (buoc lam tay duy nhat)
+---------------------------------------------------------------
+Day la buoc DUY NHAT khong tu dong hoa duoc (gioi han cua chinh
+Premiere, khong phai loi cua plugin). File phu de (.srt) da duoc
+plugin tu import san vao Project panel tu Buoc 4 — khong can tim
+lai ngoai may tinh:
+
+1. Trong Premiere, tao 1 caption track: Window > Text > Captions.
+2. Trong Project panel, tim file .srt vua duoc import, keo tha no
+   vao caption track tren timeline, dat dung tai vi tri giay 0.
+3. Bam lai nut "Verify" trong panel — neu da keo dung, plugin se
+   bao so luong dong phu de tim thay tren track.
+
+XONG! Timeline da co du: video nen + anh dong bo + phu de.
+
+---------------------------------------------------------------
+CAC LOI THUONG GAP
+---------------------------------------------------------------
+- Panel "Mic Check" khong hien ra sau khi cai .ccx:
+  Kiem tra da dang nhap Creative Cloud Desktop chua, khoi dong
+  lai han Premiere Pro (dong het cua so, mo lai).
+
+- Bao loi lien quan "frame rate" hoac sequence khong dung 60fps:
+  Premiere dang dung ban cu hon 26.2 — mo Creative Cloud Desktop,
+  cap nhat Premiere Pro len ban moi nhat.
+
+- Premiere tu dong dong/crash giua luc dang chay Mic Check (voi
+  du an nhieu anh): day la gioi han cua Premiere khi xu ly lien
+  tuc nhieu lenh dung timeline, khong phai loi du lieu. Cach xu ly:
+    1. Mo lai Premiere (chon ban Auto-Save/Recovery gan nhat neu
+       duoc hoi).
+    2. Mo lai panel Mic Check, chon LAI dung thu muc du an do.
+    3. Bam "Chay Mic Check" lai binh thuong — an toan chay lai
+       nhieu lan, anh da dat dung roi se chi bi ghi de lai chu
+       khong bi nhan doi.
+  Meo: nen bam Ctrl+S luu project truoc khi chay Mic Check voi du
+  an nhieu anh, de co diem khoi phuc gan nhat.
+
+- File .bat bao "khong tim thay docx_to_mic_check.exe":
+  File .exe phai nam CUNG thu muc voi file .bat — dung tach rieng
+  2 file nay ra 2 cho khac nhau.
+
+---------------------------------------------------------------
+CAU TRUC GOI CHIA SE NAY
+---------------------------------------------------------------
+Mic Check Plugin - Share/
+  |- HUONG_DAN_SU_DUNG.txt        (file huong dan nay)
+  |- MicCheck.ccx                 (Buoc 1 - cai plugin)
+  |- Cong Cu Doi File Word/
+       |- Chuyen_Doi_Mic_Check.bat   (Buoc 3 - keo file .docx vao day)
+       |- docx_to_mic_check.exe      (chay ngam, khong can dong vao)
