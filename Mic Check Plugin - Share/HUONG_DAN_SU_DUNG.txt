@@ -143,8 +143,12 @@ CAC LOI THUONG GAP
   an nhieu anh, de co diem khoi phuc gan nhat.
 
 - File .bat bao "khong tim thay docx_to_mic_check.exe":
-  File .exe phai nam CUNG thu muc voi file .bat — dung tach rieng
-  2 file nay ra 2 cho khac nhau.
+  Trong thu muc "Cong Cu Doi File Word" con 1 file .exe bi AN (khong
+  hien trong thu muc, co chu y — de tranh nham lan, KHONG phai bi
+  thieu file). Neu copy/gui thu muc nay sang may khac ma bao loi
+  nay, kiem tra lai phan mem nen/giai nen co bo sot file an khong
+  (7-Zip/WinRAR/nen "Send to > Compressed folder" cua Windows deu
+  giu nguyen file an mac dinh, khong can lam gi them).
 
 ---------------------------------------------------------------
 CAU TRUC GOI CHIA SE NAY
@@ -153,5 +157,9 @@ Mic Check Plugin - Share/
   |- HUONG_DAN_SU_DUNG.txt        (file huong dan nay)
   |- MicCheck.ccx                 (Buoc 1 - cai plugin)
   |- Cong Cu Doi File Word/
-       |- Chuyen_Doi_Mic_Check.bat   (Buoc 3 - keo file .docx vao day)
-       |- docx_to_mic_check.exe      (chay ngam, khong can dong vao)
+       |- Chuyen_Doi_Mic_Check.bat   (Buoc 3 - keo file .docx vao day,
+                                       DAY LA FILE DUY NHAT can dung)
+
+(Trong thu muc "Cong Cu Doi File Word" con 1 file .exe bi AN san —
+day la du dinh, khong phai loi thieu file. File .bat tu goi no ngam,
+khong can va khong nen dong truc tiep vao no.)
