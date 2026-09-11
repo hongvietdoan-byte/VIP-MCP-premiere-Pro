@@ -9,6 +9,10 @@ mic-check-plugin/scripts/build/
 mic-check-plugin/scripts/dist/
 mic-check-plugin/scripts/__pycache__/
 
+# Bản đóng gói phái sinh để gửi người dùng cuối — build lại từ mic-check-plugin/ bất cứ lúc nào,
+# không cần trùng lưu trong git (tránh nhân đôi file .exe/.ccx nặng).
+Mic Check Plugin - Share/
+
 # Media test assets (quá lớn cho git — vd clip background.mp4 193MB vượt giới hạn GitHub 100MB)
 Premiere test/file import/*.mp4
 Premiere test/file import/*.mov
