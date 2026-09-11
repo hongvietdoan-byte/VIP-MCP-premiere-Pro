@@ -14,10 +14,9 @@ mic-check-plugin/scripts/__pycache__/
 Mic Check Plugin - Share/
 Mic Check Plugin - Share.zip
 
-# Bản copy có hậu tố version (vd MicCheck_v1.2.0.ccx) — chỉ tạo tạm để gửi qua chat cho dễ phân biệt
-# bản mới/cũ, không phải file nguồn, không cần lưu trong git.
-mic-check-plugin/**/*_v[0-9]*.ccx
-mic-check-plugin/**/*_v[0-9]*.exe
+# LƯU Ý: bản .ccx chính thức trong mic-check-plugin/ giờ đặt tên kèm hậu tố version
+# (vd MicCheck_v1.4.0.ccx) — ĐÃ lưu trong git bình thường, không bị ignore. Bản test gửi
+# qua chat lúc dev luôn build ra $env:TEMP (ngoài repo) nên không bao giờ lọt vào đây.
 
 # Media test assets (quá lớn cho git — vd clip background.mp4 193MB vượt giới hạn GitHub 100MB)
 Premiere test/file import/*.mp4
