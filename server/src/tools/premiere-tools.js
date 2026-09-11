@@ -358,7 +358,12 @@ export const PREMIERE_TOOLS = [
         },
         x: { type: 'number', description: 'Toạ độ X (chỉ dùng khi paramName là Position, truyền kèm y).' },
         y: { type: 'number', description: 'Toạ độ Y (chỉ dùng khi paramName là Position, truyền kèm x).' },
-        value: { type: 'number', description: 'Giá trị số đơn (vd Scale) khi không truyền x/y.' }
+        value: { type: 'number', description: 'Giá trị số đơn (vd Scale) khi không truyền x/y.' },
+        pointMode: {
+          type: 'string',
+          enum: ['ctor', 'propset', 'horizvert', 'setmethod'],
+          description: 'Cách tạo giá trị PointF để thử (chỉ áp dụng khi set Position): "ctor" = new PointF(x,y) (mặc định), "propset" = new PointF() rồi gán p.x/p.y, "horizvert" = gán p.horiz/p.vert, "setmethod" = gọi p.setValue(x,y)/p.set(x,y).'
+        }
       },
       required: ['paramName']
     },
@@ -368,7 +373,8 @@ export const PREMIERE_TOOLS = [
         paramName: args.paramName,
         x: args.x,
         y: args.y,
-        value: args.value
+        value: args.value,
+        pointMode: args.pointMode || 'ctor'
       }, 20000);
     }
   },

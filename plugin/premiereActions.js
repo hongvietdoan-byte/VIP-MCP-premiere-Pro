@@ -2026,7 +2026,7 @@ async function setEffectParam({ matchName, paramName, value, timeSeconds }, log)
 // Geometry2"/Transform mà Beat Shake add thêm vào Adjustment Layer) — CHƯA CHẮC hành vi giống nhau.
 // Xoá hàm này (+ đăng ký ở mcpBridge.js/premiere-tools.js) sau khi tính năng thật đã port xong sang
 // mic-check-plugin, không phải tool giữ lại lâu dài.
-async function debugTestTransformKeyframe({ matchName = "AE.ADBE Motion", paramName, x, y, value }, log) {
+async function debugTestTransformKeyframe({ matchName = "AE.ADBE Motion", paramName, x, y, value, pointMode = "ctor" }, log) {
   const { project, clip } = await getActiveSequenceAndSelection(log);
 
   const comp = await findComponentByMatchName(clip, matchName);
@@ -2044,15 +2044,57 @@ async function debugTestTransformKeyframe({ matchName = "AE.ADBE Motion", paramN
 
   let kfValue;
   let valueDescription;
+  let diag = {};
   if (x != null && y != null) {
     if (typeof ppro.PointF !== "function") {
       throw new Error("ppro.PointF không tồn tại trong module premierepro ở bản này.");
     }
-    const p = new ppro.PointF();
-    p.x = x;
-    p.y = y;
+
+    // Không biết chắc constructor thật của PointF nhận gì — thử theo pointMode, đồng thời log cấu
+    // trúc thật của instance rỗng để chẩn đoán (lần trước gán p.x/p.y không có tác dụng, giá trị cuối
+    // cùng ra 32767 = INT16_MAX, nghi ngờ property đó không tồn tại/không ghi được theo cách đó).
+    const blank = new ppro.PointF();
+    diag.blankKeys = Object.keys(blank);
+    diag.blankOwnProps = Object.getOwnPropertyNames(blank);
+    try { diag.blankProtoKeys = Object.getOwnPropertyNames(Object.getPrototypeOf(blank)); } catch {}
+    try { diag.blankJson = JSON.stringify(blank); } catch (e) { diag.blankJson = `(khong stringify duoc: ${e.message})`; }
+    for (const k of diag.blankKeys) { try { diag[`blank.${k}`] = blank[k]; } catch {} }
+    log(`PointF() rỗng có keys: ${diag.blankKeys.join(", ") || "(không có key nào)"}, json=${diag.blankJson}`);
+
+    let p;
+    if (pointMode === "ctor") {
+      try {
+        p = new ppro.PointF(x, y);
+        diag.ctorAttempt = "new PointF(x, y)";
+      } catch (e) {
+        log(`⚠️ new PointF(x, y) lỗi: ${e.message} — fallback sang gán property.`, "warn");
+        p = new ppro.PointF();
+        p.x = x; p.y = y;
+        diag.ctorAttempt = "fallback propset sau khi ctor(x,y) lỗi";
+      }
+    } else if (pointMode === "horizvert") {
+      p = new ppro.PointF();
+      p.horiz = x; p.vert = y;
+      diag.ctorAttempt = "propset horiz/vert";
+    } else if (pointMode === "setmethod") {
+      p = new ppro.PointF();
+      if (typeof p.setValue === "function") p.setValue(x, y);
+      else if (typeof p.set === "function") p.set(x, y);
+      diag.ctorAttempt = "gọi p.setValue/set(x,y)";
+    } else {
+      p = new ppro.PointF();
+      p.x = x; p.y = y;
+      diag.ctorAttempt = "propset x/y (mặc định cũ)";
+    }
+
+    diag.afterKeys = Object.keys(p);
+    try { diag.afterJson = JSON.stringify(p); } catch (e) { diag.afterJson = `(khong stringify duoc: ${e.message})`; }
+    diag.afterX = p.x;
+    diag.afterY = p.y;
+    log(`Sau khi tạo theo pointMode="${pointMode}": p.x=${p.x}, p.y=${p.y}, json=${diag.afterJson}`);
+
     kfValue = p;
-    valueDescription = `PointF(${x}, ${y})`;
+    valueDescription = `PointF[${pointMode}](${x}, ${y}) -> thực tế p.x=${p.x}, p.y=${p.y}`;
   } else {
     kfValue = value;
     valueDescription = String(value);
@@ -2087,8 +2129,10 @@ async function debugTestTransformKeyframe({ matchName = "AE.ADBE Motion", paramN
     set: true,
     matchName,
     paramName,
+    pointMode,
     appliedValue: x != null ? { x, y } : value,
     keyframeCountAfter: keyframeCount,
+    diag,
     note: "Mở Effect Controls xem giá trị thật đã đổi chưa — return value của Premiere API không đáng tin 100%."
   };
 }
