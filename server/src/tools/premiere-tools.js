@@ -343,43 +343,6 @@ export const PREMIERE_TOOLS = [
   },
 
   {
-    name: 'debug_test_transform_keyframe',
-    description: 'TOOL TEST TẠM THỜI (2026-09-11, xoá sau khi xong tính năng) — set Position/Scale của effect Motion/Transform trên clip đang chọn qua createKeyframe()+createAddKeyframeAction() (KHÔNG dùng createSetValueAction, đã xác nhận lỗi "Illegal Parameter type" với mọi param). Truyền x+y để set Position (dùng ppro.PointF), hoặc value để set param dạng số (vd Scale).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        matchName: {
-          type: 'string',
-          description: 'FilterMatchName của effect trên clip, mặc định "AE.ADBE Motion".'
-        },
-        paramName: {
-          type: 'string',
-          description: 'Tên hiển thị của parameter, vd "Position" hoặc "Scale".'
-        },
-        x: { type: 'number', description: 'Toạ độ X (chỉ dùng khi paramName là Position, truyền kèm y).' },
-        y: { type: 'number', description: 'Toạ độ Y (chỉ dùng khi paramName là Position, truyền kèm x).' },
-        value: { type: 'number', description: 'Giá trị số đơn (vd Scale) khi không truyền x/y.' },
-        pointMode: {
-          type: 'string',
-          enum: ['ctor', 'propset', 'horizvert', 'setmethod'],
-          description: 'Cách tạo giá trị PointF để thử (chỉ áp dụng khi set Position): "ctor" = new PointF(x,y) (mặc định), "propset" = new PointF() rồi gán p.x/p.y, "horizvert" = gán p.horiz/p.vert, "setmethod" = gọi p.setValue(x,y)/p.set(x,y).'
-        }
-      },
-      required: ['paramName']
-    },
-    execute(wsBridge, args) {
-      return wsBridge.sendCommand('debug_test_transform_keyframe', {
-        matchName: args.matchName || 'AE.ADBE Motion',
-        paramName: args.paramName,
-        x: args.x,
-        y: args.y,
-        value: args.value,
-        pointMode: args.pointMode || 'ctor'
-      }, 20000);
-    }
-  },
-
-  {
     name: 'remove_effect',
     description: 'Xóa effect khỏi clip đang chọn theo matchName. Dùng get_clip_effects để xem danh sách effect hiện có.',
     inputSchema: {
@@ -1195,44 +1158,6 @@ export const PREMIERE_TOOLS = [
     },
     execute(wsBridge, args) {
       return wsBridge.sendCommand('batch_place_clips', args, 300000);
-    }
-  },
-
-  {
-    name: 'run_mic_check_workflow',
-    description: 'Gộp toàn bộ workflow "Mic Check" (video nền + ảnh theo caption) thành 1 lệnh: tạo sequence 60fps → import media → đặt video nền → đặt toàn bộ ảnh theo cues.json (đã chuẩn hoá từ scripts/docx_to_json.js, chạy ngoài Premiere). Không tự parse .docx — cần cues.json làm sẵn trước. Vẫn cần 1 bước tay sau cùng: kéo SRT vào caption track (giới hạn UXP, không automate được).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        cuesJsonPath: { type: 'string', description: 'Đường dẫn tuyệt đối tới cues.json (sinh ra bởi scripts/docx_to_json.js).' },
-        backgroundVideoPath: { type: 'string', description: 'Đường dẫn tuyệt đối tới video nền. Bỏ trống nếu không có video nền.' },
-        imagesDir: { type: 'string', description: 'Thư mục chứa các file ảnh được nhắc tới trong cues.json.' },
-        sequenceName: { type: 'string', description: 'Tên sequence mới sẽ tạo.' },
-        orientation: { type: 'string', enum: ['landscape', 'portrait'], description: 'Landscape = 1920x1080, portrait = 1080x1920. Mặc định landscape.' },
-        imageVideoTrackIndex: { type: 'number', description: 'Video track đặt ảnh. Mặc định 1 (V2).' },
-        backgroundVideoTrackIndex: { type: 'number', description: 'Video track đặt video nền. Mặc định 0 (V1).' },
-        timebase: { type: 'number', description: 'Frame rate sequence. Mặc định 60.' }
-      },
-      required: ['cuesJsonPath', 'imagesDir', 'sequenceName']
-    },
-    execute(wsBridge, args) {
-      return wsBridge.sendCommand('run_mic_check_workflow', args, 300000);
-    }
-  },
-
-  {
-    name: 'verify_mic_check_workflow',
-    description: 'Đối chiếu lại sequence đang active với cues.json — verify từng clip ảnh trên timeline khớp đúng tên/vị trí/thời lượng, và đếm số lượng caption item (không verify được nội dung text caption, giới hạn UXP API). Dùng để kiểm tra sau khi chạy run_mic_check_workflow hoặc sau khi user tự chỉnh tay.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        cuesJsonPath: { type: 'string', description: 'Đường dẫn tuyệt đối tới cues.json cần đối chiếu.' },
-        imageVideoTrackIndex: { type: 'number', description: 'Video track chứa ảnh cần verify. Mặc định 1 (V2).' }
-      },
-      required: ['cuesJsonPath']
-    },
-    execute(wsBridge, args) {
-      return wsBridge.sendCommand('verify_mic_check_workflow', args, 30000);
     }
   },
 

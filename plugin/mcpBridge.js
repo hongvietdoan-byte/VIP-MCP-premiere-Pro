@@ -186,7 +186,6 @@ function _sendReadyMessage() {
                    "cut_clip_at_time", "trim_clip", "delete_clip", "ripple_delete", "move_clip",
                    "detect_silence_regions", "remove_silence_gaps",
                    "apply_effect", "get_clip_effects", "set_effect_param", "remove_effect",
-                   "debug_test_transform_keyframe",
                    "list_installed_effects", "list_installed_transitions",
                    "set_clip_volume", "set_clip_pan", "mute_track", "setup_audio_ducking",
                    "add_transition", "batch_add_transitions",
@@ -201,7 +200,7 @@ function _sendReadyMessage() {
                    "capture_frame", "export_as_xml", "export_to_media_encoder",
                    "transcribe_clip", "auto_caption_from_speech",
                    // MỚI 2026-09-09 — Timeline placement, sequence mgmt, generic markers, subtitle sync
-                   "insert_clip", "overwrite_clip", "batch_place_clips", "run_mic_check_workflow", "verify_mic_check_workflow", "duplicate_clip",
+                   "insert_clip", "overwrite_clip", "batch_place_clips", "duplicate_clip",
                    "create_sequence", "duplicate_sequence", "set_active_sequence", "delete_sequence",
                    "get_sequence_settings", "set_sequence_frame_rate",
                    "insert_mogrt_caption", "srt_to_mogrt_captions",
@@ -264,7 +263,6 @@ async function _dispatchCommand(msg) {
       case "get_clip_effects":       result = await getClipEffects();                             break;
       case "set_effect_param":       result = await setEffectParam(params, bLog);                 break;
       case "remove_effect":          result = await removeEffect(params, bLog);                   break;
-      case "debug_test_transform_keyframe": result = await debugTestTransformKeyframe(params, bLog); break;
       case "list_installed_effects":     result = await listInstalledEffects();                   break;
       case "list_installed_transitions": result = await listInstalledTransitions();               break;
 
@@ -328,8 +326,6 @@ async function _dispatchCommand(msg) {
       case "insert_clip":            result = await insertClip(params, bLog);                     break;
       case "overwrite_clip":         result = await overwriteClip(params, bLog);                  break;
       case "batch_place_clips":      result = await batchPlaceClips(params, bLog);                break;
-      case "run_mic_check_workflow": result = await runMicCheckWorkflow(params, bLog);             break;
-      case "verify_mic_check_workflow": result = await verifyMicCheckWorkflow(params);              break;
       case "duplicate_clip":         result = await duplicateClip(params, bLog);                  break;
       case "create_sequence":        result = await createSequence(params);                       break;
       case "duplicate_sequence":     result = await duplicateSequence(params);                    break;
