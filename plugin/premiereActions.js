@@ -2029,6 +2029,27 @@ async function setEffectParam({ matchName, paramName, value, timeSeconds }, log)
 async function debugTestTransformKeyframe({ matchName = "AE.ADBE Motion", paramName, x, y, value, pointMode = "ctor" }, log) {
   const { project, clip } = await getActiveSequenceAndSelection(log);
 
+  // Probe tạm — tìm cách đọc kích thước pixel THẬT của file ảnh nguồn (khác frame size sequence),
+  // để biết ảnh có bị dư khoảng trống/không trim hay không trước khi tính Position/Scale.
+  const mediaProbe = {};
+  try {
+    const pi = await clip.getProjectItem();
+    mediaProbe.projectItemKeys = pi ? Object.getOwnPropertyNames(Object.getPrototypeOf(pi)) : null;
+    if (pi) {
+      for (const fn of ["getFootageInterpretation", "getVideoInfo", "getFrameSize", "getMediaSize"]) {
+        if (typeof pi[fn] === "function") {
+          try {
+            const r = await pi[fn]();
+            mediaProbe[fn] = r && typeof r === "object" ? JSON.stringify(r) : r;
+          } catch (e) { mediaProbe[fn] = `lỗi: ${e.message}`; }
+        }
+      }
+    }
+  } catch (e) {
+    mediaProbe.error = e.message;
+  }
+  log(`mediaProbe: ${JSON.stringify(mediaProbe)}`);
+
   const comp = await findComponentByMatchName(clip, matchName);
   if (!comp) throw new Error(`Không tìm thấy effect "${matchName}" trên clip. Dùng get_clip_effects để xem danh sách.`);
 
@@ -2133,6 +2154,7 @@ async function debugTestTransformKeyframe({ matchName = "AE.ADBE Motion", paramN
     appliedValue: x != null ? { x, y } : value,
     keyframeCountAfter: keyframeCount,
     diag,
+    mediaProbe,
     note: "Mở Effect Controls xem giá trị thật đã đổi chưa — return value của Premiere API không đáng tin 100%."
   };
 }
