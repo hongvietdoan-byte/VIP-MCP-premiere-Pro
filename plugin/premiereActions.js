@@ -2017,6 +2017,82 @@ async function setEffectParam({ matchName, paramName, value, timeSeconds }, log)
   return { set: true, matchName, paramName, value, timeSeconds: timeSeconds ?? null };
 }
 
+// TOOL TEST TẠM THỜI (2026-09-11) — probe cho tính năng "Chỉnh vị trí ảnh hàng loạt" bên
+// mic-check-plugin. set_effect_param() dùng createSetValueAction() bị lỗi "Illegal Parameter type"
+// với MỌI param đã thử (kể cả Opacity đơn giản) — tham khảo beat-shake-plugin xác nhận cách ĐÚNG là
+// dùng param.createKeyframe(value) + createAddKeyframeAction() (KHÔNG dùng createSetValueAction),
+// và giá trị Position phải là new ppro.PointF() chứ không phải number/array thường. Hàm này để xác
+// nhận cách đó có chạy đúng trên component "Motion" (component nội tại của clip, khác "AE.ADBE
+// Geometry2"/Transform mà Beat Shake add thêm vào Adjustment Layer) — CHƯA CHẮC hành vi giống nhau.
+// Xoá hàm này (+ đăng ký ở mcpBridge.js/premiere-tools.js) sau khi tính năng thật đã port xong sang
+// mic-check-plugin, không phải tool giữ lại lâu dài.
+async function debugTestTransformKeyframe({ matchName = "AE.ADBE Motion", paramName, x, y, value }, log) {
+  const { project, clip } = await getActiveSequenceAndSelection(log);
+
+  const comp = await findComponentByMatchName(clip, matchName);
+  if (!comp) throw new Error(`Không tìm thấy effect "${matchName}" trên clip. Dùng get_clip_effects để xem danh sách.`);
+
+  const param = await findParamByName(comp, paramName);
+  if (!param) throw new Error(`Không tìm thấy param "${paramName}" trong effect "${matchName}".`);
+
+  if (typeof param.createKeyframe !== "function") {
+    throw new Error(`param.createKeyframe không tồn tại trên param "${paramName}" — API keyframe không khả dụng ở bản Premiere này.`);
+  }
+
+  const clipInPoint = await clip.getInPoint();
+  log(`clipInPoint = ${clipInPoint.seconds.toFixed(3)}s`);
+
+  let kfValue;
+  let valueDescription;
+  if (x != null && y != null) {
+    if (typeof ppro.PointF !== "function") {
+      throw new Error("ppro.PointF không tồn tại trong module premierepro ở bản này.");
+    }
+    const p = new ppro.PointF();
+    p.x = x;
+    p.y = y;
+    kfValue = p;
+    valueDescription = `PointF(${x}, ${y})`;
+  } else {
+    kfValue = value;
+    valueDescription = String(value);
+  }
+  log(`Tạo keyframe giá trị ${valueDescription} tại vị trí clipInPoint...`);
+
+  let kf;
+  try {
+    kf = param.createKeyframe(kfValue);
+  } catch (e) {
+    throw new Error(`param.createKeyframe(${valueDescription}) ném lỗi: ${e.message}`);
+  }
+  kf.position = clipInPoint;
+
+  let ok;
+  await project.lockedAccess(() => {
+    ok = project.executeTransaction((compoundAction) => {
+      compoundAction.addAction(param.createAddKeyframeAction(kf));
+    }, `DEBUG test set ${matchName}.${paramName}`);
+  });
+  if (!ok) throw new Error("executeTransaction trả về false khi addAction(createAddKeyframeAction).");
+
+  let keyframeCount = -1;
+  try {
+    const keys = await param.getKeyframeListAsTickTimes();
+    keyframeCount = keys.length;
+  } catch (e) {
+    log(`⚠️ Không đọc lại được keyframe list: ${e.message}`, "warn");
+  }
+
+  return {
+    set: true,
+    matchName,
+    paramName,
+    appliedValue: x != null ? { x, y } : value,
+    keyframeCountAfter: keyframeCount,
+    note: "Mở Effect Controls xem giá trị thật đã đổi chưa — return value của Premiere API không đáng tin 100%."
+  };
+}
+
 async function removeEffect({ matchName }, log) {
   const { project, clip } = await getActiveSequenceAndSelection(log);
 

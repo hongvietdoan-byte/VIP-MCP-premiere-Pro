@@ -343,6 +343,37 @@ export const PREMIERE_TOOLS = [
   },
 
   {
+    name: 'debug_test_transform_keyframe',
+    description: 'TOOL TEST TẠM THỜI (2026-09-11, xoá sau khi xong tính năng) — set Position/Scale của effect Motion/Transform trên clip đang chọn qua createKeyframe()+createAddKeyframeAction() (KHÔNG dùng createSetValueAction, đã xác nhận lỗi "Illegal Parameter type" với mọi param). Truyền x+y để set Position (dùng ppro.PointF), hoặc value để set param dạng số (vd Scale).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        matchName: {
+          type: 'string',
+          description: 'FilterMatchName của effect trên clip, mặc định "AE.ADBE Motion".'
+        },
+        paramName: {
+          type: 'string',
+          description: 'Tên hiển thị của parameter, vd "Position" hoặc "Scale".'
+        },
+        x: { type: 'number', description: 'Toạ độ X (chỉ dùng khi paramName là Position, truyền kèm y).' },
+        y: { type: 'number', description: 'Toạ độ Y (chỉ dùng khi paramName là Position, truyền kèm x).' },
+        value: { type: 'number', description: 'Giá trị số đơn (vd Scale) khi không truyền x/y.' }
+      },
+      required: ['paramName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('debug_test_transform_keyframe', {
+        matchName: args.matchName || 'AE.ADBE Motion',
+        paramName: args.paramName,
+        x: args.x,
+        y: args.y,
+        value: args.value
+      }, 20000);
+    }
+  },
+
+  {
     name: 'remove_effect',
     description: 'Xóa effect khỏi clip đang chọn theo matchName. Dùng get_clip_effects để xem danh sách effect hiện có.',
     inputSchema: {

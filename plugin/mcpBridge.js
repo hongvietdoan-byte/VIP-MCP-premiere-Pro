@@ -186,6 +186,7 @@ function _sendReadyMessage() {
                    "cut_clip_at_time", "trim_clip", "delete_clip", "ripple_delete", "move_clip",
                    "detect_silence_regions", "remove_silence_gaps",
                    "apply_effect", "get_clip_effects", "set_effect_param", "remove_effect",
+                   "debug_test_transform_keyframe",
                    "list_installed_effects", "list_installed_transitions",
                    "set_clip_volume", "set_clip_pan", "mute_track", "setup_audio_ducking",
                    "add_transition", "batch_add_transitions",
@@ -263,6 +264,7 @@ async function _dispatchCommand(msg) {
       case "get_clip_effects":       result = await getClipEffects();                             break;
       case "set_effect_param":       result = await setEffectParam(params, bLog);                 break;
       case "remove_effect":          result = await removeEffect(params, bLog);                   break;
+      case "debug_test_transform_keyframe": result = await debugTestTransformKeyframe(params, bLog); break;
       case "list_installed_effects":     result = await listInstalledEffects();                   break;
       case "list_installed_transitions": result = await listInstalledTransitions();               break;
 
