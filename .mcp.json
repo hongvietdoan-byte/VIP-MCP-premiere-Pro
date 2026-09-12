@@ -2,7 +2,7 @@
   "mcpServers": {
     "premiere": {
       "command": "node",
-      "args": ["F:/Garena VN/2025/Ai/2026/VIP MCP Premiere Pro - máy công ty/VIP MCP PREMIERE PRO/server/index.js"]
+      "args": ["F:/Garena VN/2025/Ai/2026/VIP MCP Premiere Pro - máy công ty/server/index.js"]
     }
   }
 }

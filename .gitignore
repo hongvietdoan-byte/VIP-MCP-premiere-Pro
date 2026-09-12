@@ -3,22 +3,3 @@ node_modules/
 .DS_Store
 Thumbs.db
 source test/
-MIC CHECK PLUGIN/scripts/build/
-MIC CHECK PLUGIN/scripts/dist/
-MIC CHECK PLUGIN/scripts/__pycache__/
-
-# Bản đóng gói phái sinh để gửi người dùng cuối — build lại từ MIC CHECK PLUGIN/ bất cứ lúc nào,
-# không cần trùng lưu trong git (tránh nhân đôi file .exe/.ccx nặng).
-MIC CHECK PLUGIN/Mic Check Plugin - Share/
-MIC CHECK PLUGIN/Mic Check Plugin - Share.zip
-
-# LƯU Ý: bản .ccx chính thức trong MIC CHECK PLUGIN/ giờ đặt tên kèm hậu tố version
-# (vd MicCheck_v1.5.0.ccx) — ĐÃ lưu trong git bình thường, không bị ignore. Bản test gửi
-# qua chat lúc dev luôn build ra $env:TEMP (ngoài repo) nên không bao giờ lọt vào đây.
-
-# Media test assets (quá lớn cho git — vd clip background.mp4 193MB vượt giới hạn GitHub 100MB)
-MIC CHECK PLUGIN/Premiere test/file import/*.mp4
-MIC CHECK PLUGIN/Premiere test/file import/*.mov
-MIC CHECK PLUGIN/Premiere test/file import/*.mxf
-MIC CHECK PLUGIN/Premiere test/file import/*.avi
-MIC CHECK PLUGIN/Premiere test/Adobe Premiere Pro Auto-Save/

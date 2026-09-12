@@ -1,0 +1,12 @@
+{
+  "name": "premiere-mcp-standalone",
+  "version": "1.0.0",
+  "description": "Standalone MCP server for Premiere Pro — general editing tools, no Beat Shake dependency",
+  "type": "module",
+  "main": "index.js",
+  "scripts": { "start": "node index.js" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "ws": "^8.18.0"
+  }
+}
