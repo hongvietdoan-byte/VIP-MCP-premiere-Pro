@@ -815,6 +815,18 @@ function buildPositionValue(x, y, isNormalized) {
   return p;
 }
 
+// param.createSetValueAction(value, 0) đã được xác nhận LUÔN lỗi "Illegal Parameter type" với MỌI
+// loại param trên bản Premiere này (live-test nhiều lần, kể cả param đơn giản như Opacity — xem
+// MIC-CHECK-FF-PLUGIN/plugin/actions.js). Cách ĐÚNG duy nhất đã verify chạy được: tạo keyframe qua
+// createKeyframe(value), gán vị trí, rồi add qua createAddKeyframeAction — kể cả khi chỉ cần set 1
+// giá trị "tĩnh" (không animate) cũng phải đi qua đường keyframe này. Dùng hàm này thay cho MỌI chỗ
+// từng gọi createSetValueAction trực tiếp trong file.
+function setStaticKeyframe(param, value, atTick) {
+  const kf = param.createKeyframe(value);
+  kf.position = atTick;
+  return param.createAddKeyframeAction(kf);
+}
+
 // Đọc lại số keyframe THỰC SỰ đang tồn tại trên 1 param, để phân biệt "ghi thất bại thật sự"
 // với "chỉ là UI Effect Controls chưa refresh hiển thị" (2 nguyên nhân khác nhau hoàn toàn).
 async function verifyKeyframeCount(param, label, log) {
@@ -1990,31 +2002,30 @@ async function setEffectParam({ matchName, paramName, value, timeSeconds }, log)
   const param = await findParamByName(comp, paramName);
   if (!param) throw new Error(`Không tìm thấy param "${paramName}" trong effect "${matchName}". Tên param phải đúng với tên hiển thị trong Effect Controls.`);
 
-  if (timeSeconds != null) {
-    // Đặt keyframe tại thời điểm chỉ định
-    const clipInPoint = await clip.getInPoint();
-    const timeTick = secondsToTick(timeSeconds + clipInPoint.seconds);
+  // LƯU Ý: param.createAddKeyframeAction(timeTick) (truyền thẳng TickTime) và
+  // param.createSetValueAction(value, 0) đều là API SAI/LỖI — xem ghi chú tại setStaticKeyframe().
+  // Cách đúng duy nhất: tạo keyframe qua createKeyframe(value) rồi add qua createAddKeyframeAction(kf),
+  // dùng cho CẢ 2 trường hợp static lẫn có timeSeconds — chỉ khác nhau ở vị trí (tick) đặt keyframe.
+  const clipInPoint = await clip.getInPoint();
+  const atTick = timeSeconds != null ? secondsToTick(timeSeconds + clipInPoint.seconds) : clipInPoint;
 
-    await project.lockedAccess(() => {
-      project.executeTransaction((compoundAction) => {
-        compoundAction.addAction(param.createAddKeyframeAction(timeTick));
-      }, "Thêm keyframe");
-    });
-    await project.lockedAccess(() => {
-      project.executeTransaction((compoundAction) => {
-        compoundAction.addAction(param.createSetValueAtKeyframeAction(timeTick, value, 0));
-      }, "Set giá trị keyframe");
-    });
-  } else {
-    // Set static value
-    await project.lockedAccess(() => {
-      project.executeTransaction((compoundAction) => {
-        compoundAction.addAction(param.createSetValueAction(value, 0));
-      }, "Set static value");
-    });
+  let ok;
+  await project.lockedAccess(() => {
+    ok = project.executeTransaction((compoundAction) => {
+      compoundAction.addAction(setStaticKeyframe(param, value, atTick));
+    }, timeSeconds != null ? "Set giá trị keyframe" : "Set static value");
+  });
+  if (!ok) throw new Error("executeTransaction trả về false khi set giá trị param.");
+
+  // Verify read-back thật — không tin return value của executeTransaction.
+  let actualValue = null;
+  try {
+    actualValue = unwrapParamValue(await param.getValueAtTime(atTick));
+  } catch (e) {
+    if (log) log(`⚠️ Không đọc lại được giá trị để verify: ${e.message}`, "warn");
   }
 
-  return { set: true, matchName, paramName, value, timeSeconds: timeSeconds ?? null };
+  return { set: true, matchName, paramName, value, timeSeconds: timeSeconds ?? null, actualValueReadBack: actualValue };
 }
 
 async function removeEffect({ matchName }, log) {
@@ -2162,13 +2173,19 @@ async function setClipVolume({ gainDb }, log) {
   const param = await findParamByName(comp, "Level");
   if (!param) throw new Error("Không tìm thấy param 'Level' trong Volume component.");
 
+  const atTick = await clip.getInPoint();
+  let ok;
   await project.lockedAccess(() => {
-    project.executeTransaction((compoundAction) => {
-      compoundAction.addAction(param.createSetValueAction(gainDb, 0));
+    ok = project.executeTransaction((compoundAction) => {
+      compoundAction.addAction(setStaticKeyframe(param, gainDb, atTick));
     }, "Set clip volume");
   });
+  if (!ok) throw new Error("executeTransaction trả về false khi set clip volume.");
 
-  return { applied: true, gainDb };
+  let actualGainDb = null;
+  try { actualGainDb = unwrapParamValue(await param.getValueAtTime(atTick)); } catch {}
+
+  return { applied: true, gainDb, actualValueReadBack: actualGainDb };
 }
 
 async function setClipPan({ panValue }, log) {
@@ -2182,13 +2199,19 @@ async function setClipPan({ panValue }, log) {
   const param = await findParamByName(comp, "Balance") || await findParamByName(comp, "Pan");
   if (!param) throw new Error("Không tìm thấy param pan/balance.");
 
+  const atTick = await clip.getInPoint();
+  let ok;
   await project.lockedAccess(() => {
-    project.executeTransaction((compoundAction) => {
-      compoundAction.addAction(param.createSetValueAction(panValue, 0));
+    ok = project.executeTransaction((compoundAction) => {
+      compoundAction.addAction(setStaticKeyframe(param, panValue, atTick));
     }, "Set clip pan");
   });
+  if (!ok) throw new Error("executeTransaction trả về false khi set clip pan.");
 
-  return { applied: true, panValue };
+  let actualPanValue = null;
+  try { actualPanValue = unwrapParamValue(await param.getValueAtTime(atTick)); } catch {}
+
+  return { applied: true, panValue, actualValueReadBack: actualPanValue };
 }
 
 async function muteTrack({ trackIndex, muted }) {
@@ -2421,18 +2444,22 @@ async function adjustColorValues({ exposure, contrast, saturation, temperature }
     temperature: "Color Temperature"
   };
   const applied = {};
+  const atTick = await clip.getInPoint();
 
   for (const [key, val] of Object.entries({ exposure, contrast, saturation, temperature })) {
     if (val == null) continue;
     try {
       const param = await findParamByName(lumetriComp, paramMap[key]);
       if (!param) { applied[key] = "param_not_found"; continue; }
+      let ok;
       await project.lockedAccess(() => {
-        project.executeTransaction((compoundAction) => {
-          compoundAction.addAction(param.createSetValueAction(val, 0));
+        ok = project.executeTransaction((compoundAction) => {
+          compoundAction.addAction(setStaticKeyframe(param, val, atTick));
         }, `Set ${key}`);
       });
-      applied[key] = val;
+      if (!ok) { applied[key] = "executeTransaction_false"; continue; }
+      try { applied[key] = unwrapParamValue(await param.getValueAtTime(atTick)); }
+      catch { applied[key] = val; }
     } catch (e) {
       applied[key] = `error: ${e.message}`;
     }
@@ -2900,7 +2927,8 @@ async function setClipMetadata({ metadata }, log) {
 //   luôn nối tiếp sau item cuối cùng trên track — phải tự tìm item mới rồi createMoveAction(offset)
 //   để đưa về đúng vị trí, y hệt pattern insertOrOverwriteClip().
 // - Text nằm ở component "AE.ADBE Text", param hiển thị "Source Text" (param đầu tiên, index 0) —
-//   set qua param.createSetValueAction(text, 0), cùng API đã dùng cho set_effect_param.
+//   set qua setStaticKeyframe() (createKeyframe+createAddKeyframeAction), KHÔNG dùng
+//   createSetValueAction (đã xác nhận lỗi "Illegal Parameter type" với mọi param — xem đầu file).
 
 // Tìm component theo matchName trong chain của 1 track item (khác findComponentByMatchName — hàm
 // đó nhận thẳng `clip` từ getActiveSequenceAndSelection, hàm này dùng khi đã có track item sẵn).
@@ -2995,10 +3023,11 @@ async function insertMogrtCaption({ mogrtPath, startSeconds, durationSeconds, te
       }
       const param = await findParamByName(textComp, textParamName);
       if (!param) throw new Error(`Không tìm thấy param "${textParamName}" trên component Text.`);
+      const textAtTick = await newItem.getInPoint();
       let setOk;
       await project.lockedAccess(() => {
         setOk = project.executeTransaction((compoundAction) => {
-          compoundAction.addAction(param.createSetValueAction(text, 0));
+          compoundAction.addAction(setStaticKeyframe(param, text, textAtTick));
         }, "Set MOGRT caption text qua MCP");
       });
       if (!setOk) throw new Error("executeTransaction trả về false khi set text.");
