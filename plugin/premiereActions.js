@@ -1971,7 +1971,6 @@ async function setClipOpacity({ percent }, log) {
 async function getClipTransform(_params, log) {
   const { sequence, clip } = await getActiveSequenceAndSelection(log);
 
-
   const atTick = await clip.getInPoint();
   const out = {};
   const { width, height } = await getFrameDimensions(sequence, log);
@@ -2577,6 +2576,65 @@ async function removeEffect({ matchName }, log) {
     `chain.createRemoveComponentAction() không tồn tại trong bản Premiere này. ` +
     `Xóa effect "${matchName}" bằng tay trong Effect Controls.`
   );
+}
+
+// ============================================================================
+// GROUP — Effects nâng cao (2026-09-14) — dựng trên infrastructure đã verify (removeEffect,
+// findParamByName). LƯU Ý: `set_effect_enabled` (bypass effect không xoá) KHÔNG khả thi — xác nhận
+// qua probe trực tiếp prototype Component: chỉ có getParam/getMatchName/getDisplayName/
+// getParamCount, không có bất kỳ API enable/disable/bypass nào.
+// ============================================================================
+
+async function getEffectProperties({ matchName }, log) {
+  if (!matchName) throw new Error("Phải truyền matchName.");
+  const { clip } = await getActiveSequenceAndSelection(log);
+  const comp = await findComponentByMatchName(clip, matchName);
+  if (!comp) throw new Error(`Không tìm thấy effect "${matchName}" trên clip. Dùng get_clip_effects để xem.`);
+
+  const atTick = await clip.getInPoint();
+  const count = await comp.getParamCount();
+  const params = [];
+  for (let i = 0; i < count; i++) {
+    const param = await comp.getParam(i);
+    let value = null;
+    try { value = unwrapParamValue(await param.getValueAtTime(atTick)); } catch (e) { value = { error: e.message }; }
+    let keyframeCount = null;
+    try { keyframeCount = (await param.getKeyframeListAsTickTimes()).length; } catch {}
+    params.push({ index: i, displayName: param.displayName, value, keyframeCount });
+  }
+
+  return { matchName, displayName: await comp.getDisplayName(), paramCount: count, params };
+}
+
+async function removeAllEffects(_params, log) {
+  const { project, clip } = await getActiveSequenceAndSelection(log);
+  const chain = await clip.getComponentChain();
+  if (typeof chain.createRemoveComponentAction !== "function") {
+    throw new Error("chain.createRemoveComponentAction() không tồn tại trong bản Premiere này.");
+  }
+
+  const count = await chain.getComponentCount();
+  const toRemove = [];
+  for (let i = 0; i < count; i++) {
+    const comp = await chain.getComponentAtIndex(i);
+    toRemove.push({ comp, displayName: await comp.getDisplayName() });
+  }
+
+  const removed = [], failed = [];
+  for (const { comp, displayName } of toRemove) {
+    try {
+      await project.lockedAccess(() => {
+        project.executeTransaction((ca) => {
+          ca.addAction(chain.createRemoveComponentAction(comp));
+        }, `Xoá effect ${displayName}`);
+      });
+      removed.push(displayName);
+    } catch (e) {
+      failed.push({ displayName, error: e.message });
+    }
+  }
+
+  return { removed, failed, removedCount: removed.length };
 }
 
 // ----- Liệt kê effect/transition THẬT đang cài trên máy (kể cả plugin bên thứ 3 mà database

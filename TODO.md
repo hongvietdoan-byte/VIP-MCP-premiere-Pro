@@ -2,6 +2,14 @@
 
 Cập nhật lần cuối: 2026-09-14. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
+## 🔨 `get_effect_properties`/`remove_all_effects` mới — ĐÃ CODE, CHỜ RESTART ĐỂ LIVE-TEST (2026-09-14)
+
+Tiếp tục nhóm 11 (Effects nâng cao) từ `AUDIT_MASTER_TOOL_LIST.md`. Trước khi code, probe trực tiếp prototype `Component` (effect) qua hijack tạm `get_clip_transform` (không cần restart) — xác nhận:
+- Component chỉ có `getParam/getMatchName/getDisplayName/getParamCount` — **KHÔNG có API enable/disable/bypass nào** → `set_effect_enabled` KHÔNG khả thi qua UXP, loại khỏi kế hoạch.
+- `get_effect_properties`/`remove_all_effects` dựng trên infrastructure đã verify (`findParamByName`, `chain.createRemoveComponentAction` đã dùng ở `remove_effect`) — không cần API mới, rủi ro thấp.
+
+**Cần restart app Claude** để nạp schema mới.
+
 ## ✅ `rename_clip`/`enable_disable_clip` — ĐÃ LIVE-TEST ĐÚNG, KHÔNG BUG (2026-09-14)
 
 Live-test trên sequence test riêng (tạo mới, xác nhận qua `get_status` trước khi ghi — áp dụng bài học từ sự cố trước). `rename_clip("Test Clip Renamed")` → `actualName` khớp đúng. `enable_disable_clip(false)` → `actualEnabled:false`; bật lại `enable_disable_clip(true)` → `actualEnabled:true`. Cả 2 tool đúng ngay từ lần code đầu (nhờ probe API trước khi viết thay vì đoán) — không cần fix gì thêm.

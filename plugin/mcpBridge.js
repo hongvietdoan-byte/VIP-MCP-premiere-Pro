@@ -213,7 +213,8 @@ function _sendReadyMessage() {
                    "set_clip_position", "set_clip_anchor_point", "set_clip_scale", "set_clip_rotation",
                    "set_clip_opacity", "get_clip_transform",
                    "remove_selected_clips", "extract_selection", "lift_selection",
-                   "rename_clip", "enable_disable_clip"]
+                   "rename_clip", "enable_disable_clip",
+                   "get_effect_properties", "remove_all_effects"]
   }));
 }
 
@@ -385,6 +386,10 @@ async function _dispatchCommand(msg) {
       // Group 22: Rename/Enable-Disable clip (2026-09-14)
       case "rename_clip":            result = await renameClip(params, bLog);                      break;
       case "enable_disable_clip":    result = await enableDisableClip(params, bLog);                break;
+
+      // Group 23: Effects nâng cao (2026-09-14)
+      case "get_effect_properties":  result = await getEffectProperties(params, bLog);              break;
+      case "remove_all_effects":     result = await removeAllEffects(params, bLog);                 break;
 
       default:
         throw new Error("Tool không được hỗ trợ: " + tool + ". Dùng get_beat_styles để xem danh sách.");

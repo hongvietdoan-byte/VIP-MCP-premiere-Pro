@@ -1813,5 +1813,32 @@ export const PREMIERE_TOOLS = [
     execute(wsBridge, args) {
       return wsBridge.sendCommand('enable_disable_clip', { enabled: args.enabled }, 15000);
     }
+  },
+
+  // ==========================================================================
+  // GROUP 23 — Effects nâng cao (2026-09-14)
+  // ==========================================================================
+  {
+    name: 'get_effect_properties',
+    description: 'Đọc TẤT CẢ parameter của 1 effect trên clip đang chọn: tên, giá trị hiện tại, số keyframe. Dùng get_clip_effects trước để lấy matchName.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        matchName: { type: 'string', description: 'FilterMatchName của effect trên clip (lấy từ get_clip_effects).' }
+      },
+      required: ['matchName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('get_effect_properties', { matchName: args.matchName }, 15000);
+    }
+  },
+
+  {
+    name: 'remove_all_effects',
+    description: 'Xoá TẤT CẢ effect trên clip đang chọn trong 1 lệnh (kể cả Motion/Opacity nếu API cho phép — trả về danh sách đã xoá thành công và thất bại riêng).',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('remove_all_effects', {}, 20000);
+    }
   }
 ];
