@@ -2606,7 +2606,14 @@ async function getEffectProperties({ matchName }, log) {
   return { matchName, displayName: await comp.getDisplayName(), paramCount: count, params };
 }
 
-async function removeAllEffects(_params, log) {
+// ⚠️ AN TOÀN (phát hiện 2026-09-14, live-test): API cho phép xoá CẢ "Motion"/"Opacity" — 2 component
+// nội tại mà UI Premiere bình thường KHÔNG cho xoá (luôn mờ trong Effect Controls, không có nút xoá).
+// Live-test xác nhận xoá xong clip mất hẳn khả năng đọc/ghi transform (get_clip_transform trả rỗng),
+// rủi ro cao hơn lợi ích cho hành vi mặc định "xoá hết effect". Mặc định BỎ QUA 2 component này —
+// chỉ xoá khi truyền rõ includeIntrinsic:true (người dùng chủ động chấp nhận rủi ro).
+const INTRINSIC_COMPONENT_NAMES = new Set(["Motion", "Opacity"]);
+
+async function removeAllEffects({ includeIntrinsic = false } = {}, log) {
   const { project, clip } = await getActiveSequenceAndSelection(log);
   const chain = await clip.getComponentChain();
   if (typeof chain.createRemoveComponentAction !== "function") {
@@ -2614,10 +2621,15 @@ async function removeAllEffects(_params, log) {
   }
 
   const count = await chain.getComponentCount();
-  const toRemove = [];
+  const toRemove = [], skipped = [];
   for (let i = 0; i < count; i++) {
     const comp = await chain.getComponentAtIndex(i);
-    toRemove.push({ comp, displayName: await comp.getDisplayName() });
+    const displayName = await comp.getDisplayName();
+    if (!includeIntrinsic && INTRINSIC_COMPONENT_NAMES.has(displayName)) {
+      skipped.push(displayName);
+      continue;
+    }
+    toRemove.push({ comp, displayName });
   }
 
   const removed = [], failed = [];
@@ -2634,7 +2646,7 @@ async function removeAllEffects(_params, log) {
     }
   }
 
-  return { removed, failed, removedCount: removed.length };
+  return { removed, failed, skipped, removedCount: removed.length };
 }
 
 // ----- Liệt kê effect/transition THẬT đang cài trên máy (kể cả plugin bên thứ 3 mà database

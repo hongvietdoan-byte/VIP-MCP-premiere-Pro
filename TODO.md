@@ -2,6 +2,16 @@
 
 Cập nhật lần cuối: 2026-09-14. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
+## ✅ `get_effect_properties`/`remove_all_effects` — ĐÃ LIVE-TEST, 1 BUG AN TOÀN ĐÃ FIX (2026-09-14)
+
+`get_effect_properties` đúng ngay từ đầu — đọc đủ tên/giá trị/keyframeCount của từng param, verify trên effect Gaussian Blur (Blurriness/Blur Dimensions/param không tên thứ 3).
+
+**🐛 Bug an toàn (ĐÃ FIX)**: `remove_all_effects` lần đầu test xoá SẠCH cả `Motion`/`Opacity` — 2 component nội tại mà UI Premiere bình thường KHÔNG cho xoá (luôn mờ, không có nút xoá trong Effect Controls). Live-test xác nhận hậu quả thật: sau khi xoá, `get_clip_transform` trên đúng clip đó trả về rỗng `{}` — clip mất hẳn khả năng đọc/ghi transform qua `set_clip_position`/`set_clip_scale`/... (các tool nhóm 9 đợt trước). Đây là hành vi API cho phép nhưng vượt quá kỳ vọng thông thường của "xoá hết effect".
+
+**Đã fix**: mặc định `remove_all_effects` BỎ QUA Motion/Opacity (thêm field `skipped` trong kết quả trả về), chỉ xoá khi truyền rõ `includeIntrinsic:true`. Live-test lại: xoá clip có 1 effect Gaussian Blur (không có Motion/Opacity trong chain lúc đó) → xoá đúng, `skipped:[]`.
+
+**Ghi chú phụ (không phải bug, chỉ là quan sát)**: Motion/Opacity KHÔNG phải lúc nào cũng xuất hiện sẵn trong `getComponentChain()` của mọi clip — clip đầu tiên test trong phiên có cả 3 (Opacity/Motion/Gaussian Blur), nhưng các clip khác chèn sau đó trong CÙNG session chỉ hiện đúng effect vừa áp (không có Motion/Opacity) dù cùng loại media. Có thể là hành vi lazy-load của Premiere, chưa rõ nguyên nhân chính xác — không ảnh hưởng tính đúng đắn của fix trên (logic skip vẫn đúng bất kể component có xuất hiện hay không).
+
 ## 🔨 `get_effect_properties`/`remove_all_effects` mới — ĐÃ CODE, CHỜ RESTART ĐỂ LIVE-TEST (2026-09-14)
 
 Tiếp tục nhóm 11 (Effects nâng cao) từ `AUDIT_MASTER_TOOL_LIST.md`. Trước khi code, probe trực tiếp prototype `Component` (effect) qua hijack tạm `get_clip_transform` (không cần restart) — xác nhận:

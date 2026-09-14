@@ -1835,10 +1835,16 @@ export const PREMIERE_TOOLS = [
 
   {
     name: 'remove_all_effects',
-    description: 'Xoá TẤT CẢ effect trên clip đang chọn trong 1 lệnh (kể cả Motion/Opacity nếu API cho phép — trả về danh sách đã xoá thành công và thất bại riêng).',
-    inputSchema: { type: 'object', properties: {}, required: [] },
-    execute(wsBridge) {
-      return wsBridge.sendCommand('remove_all_effects', {}, 20000);
+    description: 'Xoá TẤT CẢ effect người dùng đã thêm trên clip đang chọn trong 1 lệnh. Mặc định GIỮ LẠI Motion/Opacity (component nội tại mà UI Premiere bình thường không cho xoá — xoá sẽ làm clip mất khả năng đọc/ghi transform qua get_clip_transform/set_clip_position...). Trả về danh sách đã xoá/thất bại/bỏ qua riêng.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        includeIntrinsic: { type: 'boolean', description: 'true = xoá luôn cả Motion/Opacity (RỦI RO: clip mất khả năng đọc/ghi transform). Mặc định false.' }
+      },
+      required: []
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('remove_all_effects', { includeIntrinsic: args.includeIntrinsic }, 20000);
     }
   }
 ];
