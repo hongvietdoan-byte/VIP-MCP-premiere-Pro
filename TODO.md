@@ -2,7 +2,11 @@
 
 Cập nhật lần cuối: 2026-09-14. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
-## 🔨 `get_clip_volume`/`set_clip_mute` mới — ĐÃ CODE, CHỜ RESTART ĐỂ LIVE-TEST (2026-09-14)
+## ✅ `get_clip_volume`/`set_clip_mute` — ĐÃ LIVE-TEST ĐÚNG, KHÔNG BUG (2026-09-14)
+
+Live-test trên sequence test riêng (verify qua `get_status` trước khi ghi). `get_clip_volume` đọc đúng `gainDb`+`muted`. `set_clip_mute(true)` → verify độc lập qua `get_clip_volume` lần 2 xác nhận `muted:true`, `gainDb` giữ nguyên không đổi (mute độc lập với gain, đúng kỳ vọng). `set_clip_mute(false)` unmute lại → verify đúng. Cả 2 tool đúng ngay từ lần code đầu nhờ probe param `Mute` trước khi viết.
+
+## Chi tiết batch `get_clip_volume`/`set_clip_mute` (đã live-test xong, xem mục ✅ phía trên)
 
 Tiếp tục nhóm 13 (Audio nâng cao) từ `AUDIT_MASTER_TOOL_LIST.md`. Trước khi code:
 - **Xác nhận `set_track_volume`/`set_track_pan`/`solo_track` KHÔNG khả thi** — dựa vào kết quả probe `Track` prototype đã có từ trước (mục track management, 2026-09-14 đợt đầu): Track chỉ có `createSetNameAction/setMute/getMediaType/getIndex/isMuted/getTrackItems`, không có method volume/pan/solo nào. Loại khỏi kế hoạch.
