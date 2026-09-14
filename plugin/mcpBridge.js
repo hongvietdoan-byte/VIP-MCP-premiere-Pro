@@ -370,37 +370,39 @@ async function _cmdGetSequenceInfo() {
   let name = "Active Sequence";
   try { name = sequence.name || (await sequence.getName()) || name; } catch {}
 
-  let frameWidth = 1920, frameHeight = 1080, frameRate = 25;
-  let _fpsDebug = {};
+  let frameWidth = 1920, frameHeight = 1080, frameRate = null;
+  let fpsSource = null;
   try {
     const settings = await sequence.getSettings();
     const rect = await settings.getVideoFrameRect();
     if (rect && rect.width > 0) { frameWidth = rect.width; frameHeight = rect.height; }
 
-    // Gọi getVideoDisplayFormat — timecode format, encode fps
-    try { _fpsDebug.videoDisplayFormat = await settings.getVideoDisplayFormat(); } catch (e) { _fpsDebug.vdfErr = e.message; }
-    try { _fpsDebug.editingMode = await settings.getEditingMode(); } catch (e) { _fpsDebug.emErr = e.message; }
-    try {
+    // API chuẩn xác nhận đúng từ Premiere Pro 26.2+ (xem getSequenceSettings trong
+    // premiereActions.js) — ưu tiên dùng, KHÔNG làm tròn về số nguyên như bug cũ (báo 25
+    // thay vì 23.976 thật).
+    if (typeof settings.getVideoFrameRate === "function") {
+      const fr = await settings.getVideoFrameRate();
+      if (fr && typeof fr.value === "number") {
+        frameRate = fr.value;
+        fpsSource = "getVideoFrameRate";
+      }
+    }
+
+    // Fallback cho Premiere < 26.2 (không có getVideoFrameRate): suy ra từ timebase.
+    if (frameRate === null) {
       const tb = await sequence.getTimebase();
-      _fpsDebug.timebaseRaw = tb;
       const ticksPerSecond = 254016000000;
       const tbNum = Number(tb);
-      if (tbNum > 0) _fpsDebug.timebaseFpsGuess = Math.round((ticksPerSecond / tbNum) * 1000) / 1000;
-    } catch (e) { _fpsDebug.tbErr = e.message; }
-    try { _fpsDebug.settingsProto = Object.getOwnPropertyNames(Object.getPrototypeOf(settings)); } catch {}
-    try {
-      if (typeof settings.getVideoFrameRate === "function") {
-        const fr = await settings.getVideoFrameRate();
-        _fpsDebug.getVideoFrameRateValue = fr && fr.value;
-      } else {
-        _fpsDebug.getVideoFrameRateMissing = true;
+      if (tbNum > 0) {
+        frameRate = Math.round((ticksPerSecond / tbNum) * 1000) / 1000;
+        fpsSource = "timebaseGuess";
       }
-    } catch (e) { _fpsDebug.gvfrErr = e.message; }
-    // Probe sequence prototype để tìm method fps
-    try { _fpsDebug.seqProto = Object.getOwnPropertyNames(Object.getPrototypeOf(sequence)); } catch {}
-  } catch (e) { _fpsDebug.outerErr = e.message; }
+    }
+  } catch (e) {
+    fpsSource = `error: ${e.message}`;
+  }
 
-  return { name, frameWidth, frameHeight, frameRate, _fpsDebug };
+  return { name, frameWidth, frameHeight, frameRate, fpsSource };
 }
 
 async function _cmdGetSelectedClips(log) {
