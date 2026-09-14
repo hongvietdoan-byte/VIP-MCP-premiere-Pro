@@ -2,6 +2,10 @@
 
 Cập nhật lần cuối: 2026-09-14. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
+## ✅ 4 tool Playhead & Sequence In/Out — ĐÃ LIVE-TEST ĐÚNG, KHÔNG BUG (2026-09-14)
+
+Live-test trên sequence test riêng. `set_playhead_position(5.5)` → verify độc lập qua `get_playhead_position` khớp đúng. `set_sequence_in_out_points`: sequence mới tạo có baseline `inSeconds/outSeconds: -400000` (sentinel "chưa đặt work area" của Premiere, không phải bug) — set `(2,10)` → verify đúng; set chỉ `inSeconds:1` (bỏ trống outSeconds) → verify đúng `outSeconds` giữ nguyên 10, chỉ `inSeconds` đổi (logic partial-update đúng). Cả 4 tool đúng ngay từ lần code đầu nhờ probe API trước.
+
 ## 🔨 4 tool Playhead & Sequence In/Out mới — ĐÃ CODE, CHỜ RESTART ĐỂ LIVE-TEST (2026-09-14)
 
 Tiếp tục nhóm 20 (Playback/Navigation) từ `AUDIT_MASTER_TOOL_LIST.md`. Probe trực tiếp prototype `Sequence` (hijack tạm `list_sequence_tracks`, không cần restart) xác nhận:
