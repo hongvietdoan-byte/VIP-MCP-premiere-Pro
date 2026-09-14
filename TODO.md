@@ -1,6 +1,6 @@
 # TODO — Premiere MCP
 
-Cập nhật lần cuối: 2026-09-10. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
+Cập nhật lần cuối: 2026-09-14. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
 ## ✅ `scripts/Chuyen_Doi_Mic_Check.bat` — kéo-thả file docx, không cần gõ lệnh (2026-09-10)
 
@@ -154,7 +154,7 @@ Core tool cho use case gốc (đặt ảnh/clip lên timeline theo time range).
 - **`move_item_to_bin`** — vẫn LỖI, đã đào sâu 2026-09-10 nhưng chưa xong: `getChildCount`/`getChildAtIndex` đã sửa đúng (`getItems()`), và xác nhận `FolderItem.createMoveItemAction` **có thật** trên prototype (live-test) — nhưng gọi với `(sourceItem)` báo `"Not Enough Parameters"` từ native layer, thử thêm `([sourceItem], false)`/`(sourceItem, false)` đều fail cùng lỗi. `createMoveItemAction.length` báo 0 (không đáng tin, hàm native). Chưa tìm ra chữ ký đúng — cần điều tra thêm (có thể cần 1 object `ProjectItemSelection` thay vì item trực tiếp, class này tồn tại nhưng chưa rõ cách khởi tạo).
 - **`get_project_info` bins list, `import_files` binName lookup** — cùng bug `getChildCount`/`getChildAtIndex`, đã sửa sang `getItems()`. **CHƯA LIVE-TEST riêng** (nhưng cùng pattern đã xác nhận đúng ở `create_bin`).
 - **`get_clip_metadata`/`set_clip_metadata`** — `projectItem.getXMPMetadata` không tồn tại. **CHƯA tìm ra API đúng** — docs Adobe UXP hiện tại không liệt kê method XMP metadata nào trên `ProjectItem`. Code giờ báo lỗi rõ kèm liệt kê toàn bộ prototype thật của `projectItem` (khi gọi sẽ thấy list) thay vì lỗi mù mờ — cần gọi thử `get_clip_metadata` với 1 clip đang chọn để xem danh sách method thật, rồi tra xem có method nào khác đảm nhiệm XMP không (có thể metadata phải qua 1 class riêng chưa được expose ở `ppro.*`, hoặc thật sự chưa có API — cần điều tra thêm).
-- **`move_clip`** — sửa dùng `createMoveAction` từ 2026-09-09, giờ đã unblock được vì `select_all_clips` hoạt động thật → có thể chọn clip bằng script rồi test `move_clip`. **CHƯA LIVE-TEST** (việc tiếp theo).
+- **`move_clip`** — sửa dùng `createMoveAction` từ 2026-09-09. **✅ LIVE-TESTED 2026-09-14** (sau khi fix `select_all_clips` thật): chọn clip qua `select_clips_in_range`, gọi `move_clip(startSeconds:3)`, `get_selected_clips` xác nhận `startSeconds:3` đúng.
 
 ## ✅ Bug fix — `get_sequence_info` báo sai frameRate (2026-09-14)
 
@@ -164,16 +164,197 @@ Core tool cho use case gốc (đặt ảnh/clip lên timeline theo time range).
 
 **Live-tested**: `get_sequence_info` trên "Sequence 01" (1080x1920) → `frameRate: 60, fpsSource: "getVideoFrameRate"` — đúng thật, không còn báo sai 25/làm tròn.
 
-## Ưu tiên 3 — Test theo đợt ~40 tool còn lại
+## ✅ Bug fix lớn — `select_all_clips`/`select_clips_in_range` báo "selected:N" giả — ĐÃ FIX THẬT, LIVE-TESTED (2026-09-14)
 
-`cut_clip_at_time`, `trim_clip`, `delete_clip`, `ripple_delete`, `detect_silence_regions`, `remove_silence_gaps`, `apply_effect`, `set_effect_param`, `remove_effect`, `search_effects`, `list_available_transitions`, `set_clip_volume`, `set_clip_pan`, `mute_track`, `setup_audio_ducking`, `add_transition`, `batch_add_transitions`, `apply_lumetri_preset`, `set_clip_color_label`, `adjust_color_values`, `create_caption_track`, `import_srt`, `set_clip_speed`, `reverse_clip`, `freeze_frame`, `replace_clip_media`, `relink_offline_media`, `detect_scene_edits`, `set_clip_metadata`, `import_mogrt`, `capture_frame`, `export_as_xml`, `export_to_media_encoder`, `transcribe_clip`, `auto_caption_from_speech`, `duplicate_clip`, `import_transcript_json` (thử nghiệm), `move_clip`, `move_item_to_bin`.
+Bug ghi nhận trước đó (2026-09-10) tưởng đã fix bằng `sequence.setSelection(trackItems)` (mảng thô) hoá ra **vẫn sai** — live-test lại hôm nay trên `Test MCP.prproj` với 1 clip thật trên timeline vẫn báo `selectError: "Illegal Parameter type"` (dễ nhầm là do timeline rỗng, đã loại trừ bằng debug field đếm track/item thật trước khi kết luận).
+
+**Root cause thật**: `sequence.setSelection()` **không nhận mảng `TrackItem[]` thô**. API đúng (tìm ra bằng cách probe trực tiếp prototype của object `sequence.getSelection()` trả về): lấy `TrackItemSelection` hiện tại qua `sequence.getSelection()` (trả về object rỗng hợp lệ kể cả khi chưa chọn gì, không throw), gọi `.addItem(item)` cho từng track item, rồi mới `sequence.setSelection(selectionObj)` — truyền object đó, không phải mảng.
+
+**Đã fix**: thêm helper `_buildSelectionObject(sequence, items)` dùng chung cho `selectClipsInRange`/`selectAllClips` (`plugin/premiereActions.js`). Cũng dọn `deselectAllClips` — bỏ nhánh `createSelectItemsAction` chết (API không tồn tại, đã biết từ trước) chỉ giữ `sequence.clearSelection()` trực tiếp.
+
+**Live-tested đầy đủ trên `Test MCP.prproj`** (import `icon.png`, đặt lên timeline qua `insert_clip`):
+- `select_all_clips` → `selected:1`, xác nhận thật qua `get_selected_clips` (Premiere thực sự chọn clip).
+- `deselect_all_clips` → `done:true`.
+- `select_clips_in_range(0,5)` → `selected:1` đúng clip trong range.
+- `move_clip(startSeconds:3)` (dùng clip đang chọn từ bước trên) → **unblock được, live-tested lần đầu** — `get_selected_clips` xác nhận `startSeconds:3` đúng.
+
+**Bài học lặp lại lần 2**: lỗi bị nuốt/hiểu nhầm dễ đổ lỗi sai nguyên nhân (tưởng "timeline rỗng" hoặc "code cũ đã đúng rồi") — phải thêm debug field đếm thật (track count, item count, kiểu dữ liệu tham số) trước khi kết luận, đúng bài học đã ghi ở TODO cũ nhưng lần này áp dụng triệt để hơn (probe cả prototype instance thay vì chỉ đoán tên method).
+
+## ✅ Bug fix — `trim_clip` dùng nhầm SOURCE TRIM API, crash native "nullptr" — ĐÃ FIX, LIVE-TESTED (2026-09-14)
+
+Cùng lớp bug đã fix ở `insert_clip`/`overwrite_clip` (Ưu tiên 1): code cũ dùng `createSetInPointAction`/`createSetOutPointAction` (source trim, `getInPoint`/`getOutPoint` = "relative to start time of the project item"), trong khi mô tả tool là "chỉnh in/out theo **sequence time**" (vị trí timeline). Live-test trên clip ảnh tĩnh (`icon.png`, start=3s end=13s) gọi `trim_clip(inSeconds:3, outSeconds:8)` → crash native **"A nullptr was dereferenced"** (still image không có in/out point hợp lệ theo source trim ở giá trị đó).
+
+**Đã fix**: probe trực tiếp prototype của track item (`clip`) — xác nhận có `createSetStartAction`/`createSetEndAction`, đối xứng đúng với `getStartTime()`/`getEndTime()` (API vị trí timeline đã xác nhận chuẩn nhiều lần trước, dùng ở `insertOrOverwriteClip`). Đổi `trim_clip` sang dùng 2 action này thay vì cặp In/OutPoint.
+
+**Live-tested**: clip 3s→13s (duration 10s) → `trim_clip(inSeconds:3, outSeconds:8)` → `trimmed:true, newInSeconds:3, newOutSeconds:8`, xác nhận độc lập qua `get_selected_clips`: `startSeconds:3, durationSeconds:5` đúng thật.
+
+## ✅ Bug fix — `duplicate_clip` báo sai `expectedNewStartSeconds` + cảnh báo hành vi overlap (2026-09-14)
+
+`duplicateClip()` tính `originalStart` bằng `clip.getInPoint()` (source trim, thường mặc định ~3600s cho clip ảo/still image) thay vì `clip.getStartTime()` (vị trí timeline) — cùng lớp bug getInPoint/getStartTime đã gặp nhiều lần. Live-test: `duplicate_clip(offsetSeconds:2)` báo `expectedNewStartSeconds: 3601.98` dù clip gốc ở giây 3 trên timeline. Đã fix dùng `getStartTime()`.
+
+**Phát hiện thêm khi verify qua `get_selected_clips`**: `createCloneTrackItemAction` với `offsetSeconds` NHỎ HƠN duration clip gốc (bản sao đè lên chính nó) sẽ **cắt/chia clip gốc thành nhiều mảnh** thay vì giữ nguyên clip gốc + thêm bản sao độc lập — live-test cho ra 3 track item từ 1 clip gốc (3-8s) + 1 duplicate (offset 2s), kết quả thật là 3 mảnh `[3-5s][5-10s][10-13s]` thay vì 2 clip riêng biệt như kỳ vọng. Đã thêm cảnh báo rõ trong response field `note`: dùng `offsetSeconds >= duration` clip gốc hoặc đổi track (`videoTrackOffset`) để tránh làm hỏng clip gốc ngoài ý muốn. Không phải bug code (đúng là hành vi native của `createCloneTrackItemAction` khi overlap) — chỉ documentation gap trước đó.
+
+## 🔴 CHƯA GIẢI QUYẾT — `delete_clip`/`ripple_delete` hoàn toàn không hoạt động (2026-09-14)
+
+Live-test trên `Test MCP.prproj` (3 clip ảnh tĩnh thật trên timeline): CẢ 2 tool đều lỗi.
+
+- **`delete_clip(ripple:false)`**: nhánh chính `clip.createRemoveAction()` — method này **KHÔNG tồn tại** trên TrackItem (đã xác nhận qua probe prototype trực tiếp, xem mục fix `trim_clip` phía trên — danh sách đầy đủ method thật không có `createRemoveAction`). Fallback `clip.remove(false, false)` cũng **KHÔNG tồn tại** (`clip.remove is not a function`). Cả 2 API mà code cũ giả định đều sai.
+- **`delete_clip(ripple:true)`**: nhánh QE DOM (`qeSeq.rippleDelete`) thất bại âm thầm (lỗi bị nuốt trong catch rỗng — nợ kỹ thuật cũ), fallback `clip.remove(true, false)` cũng lỗi tương tự.
+- **`ripple_delete`**: cùng gốc — dùng `item.remove(true, false)` không tồn tại, QE DOM cũng không thành công. Trả về `removed:false` thay vì throw (do catch rỗng trong vòng lặp), dễ nhầm là "không tìm thấy clip" dù thực ra clip có thật.
+
+**Đã điều tra tìm API đúng nhưng CHƯA RA**: probe trực tiếp `SequenceEditor` prototype (giống cách tìm ra `createRemoveItemsAction` cho bin ở `move_item_to_bin`) → xác nhận có `SequenceEditor.createRemoveItemsAction`, nhưng thử **9 chữ ký tham số khác nhau** (số lượng tham số 1-3, thứ tự `(selection, ripple, alignToVideo)` / `(ripple, alignToVideo, selection)` / mảng thô thay vì `TrackItemSelection`, `clip` trực tiếp...) đều báo `"Not Enough Parameters"` (thiếu tham số) hoặc `"Illegal Parameter type"` (sai kiểu) — không tìm ra tổ hợp đúng. `Track` prototype (`getVideoTrack(i)`) cũng không có method xoá nào (`getTrackItems`/`setMute`/`getIndex` chỉ đọc).
+
+**Cần làm tiếp**: tìm tài liệu Adobe UXP chính thức cho `SequenceEditor.createRemoveItemsAction` (không có trong bất kỳ file nào của repo này — đã grep toàn bộ), hoặc thử thêm tổ hợp tham số khác (vd `TrackItemSelection` built khác cách, hoặc method cần gọi qua `project.executeTransaction` context khác). Cho tới khi tìm ra, **`delete_clip`/`ripple_delete` không dùng được qua script** — xoá clip vẫn phải làm tay trong Premiere.
+
+**Dọn dẹp còn nợ do bug này**: 3 clip test `icon.png` (3-5s, 5-10s, 10-13s trên `Test MCP.prproj` V1) không xoá được qua MCP — cần xoá tay.
+
+## ✅ 3 BUG LỚN CUỐI CÙNG ĐÃ FIX — nhờ audit 5 repo GitHub tham khảo (2026-09-14)
+
+Theo yêu cầu user, đã audit 5 repo GitHub MCP Premiere khác (`hetpatel-11/Adobe_Premiere_Pro_MCP`, `leancoderkavy/premiere-pro-mcp`, `ayushozha/AdobePremiereProMCP`, `antipaster/Adobe-Premiere-Pro-MCP`, `nepfaff/premiere-pro-mcp`) + repo tham khảo `CaYatur/PremiereProMCP` + **quan trọng nhất: `AdobeDocs/uxp-premiere-pro-samples`** (sample chính thức của Adobe — nguồn xác thực, override mọi suy luận từ repo bên thứ 3). Báo cáo đầy đủ tại `AUDIT_5_REPOS.md` (gốc repo). Tìm ra fix UXP-native thật cho cả 3 vấn đề đã bí lâu:
+
+**1. `delete_clip`/`ripple_delete` — FIX + LIVE-TESTED.** API đúng từ sample `sequenceEditor.ts` của Adobe: `sequenceEditor.createRemoveItemsAction(trackItemSelection, ripple, mediaType)` — **3 THAM SỐ**, thiếu tham số thứ 3 (`ppro.Constants.MediaType.VIDEO`/`AUDIO`) là lý do mọi lần thử trước (kể cả 9 tổ hợp đã thử) đều lỗi "Not Enough Parameters"/"Illegal Parameter type". `trackItemSelection` lấy qua `_buildSelectionObject()` (helper đã có sẵn từ fix `select_all_clips`). Đã viết lại `deleteClip()` và `rippleDelete()` trong `plugin/premiereActions.js`, bỏ hết nhánh QE DOM/`clip.remove()` chết. Live-test: xoá thường (`ripple:false`) và ripple thật (`ripple:true`, clip sau tự dịch trái đúng từ 5s→2s) đều đúng, verify qua `get_selected_clips`.
+
+**2. `move_item_to_bin` — FIX + LIVE-TESTED.** API đúng từ sample `projectPanel.ts`: `createMoveItemAction(itemToMove, destinationFolderCast)` — **2 THAM SỐ** (item cần di chuyển + folder đích đã `ppro.FolderItem.cast()`), gọi trên `rootItem` (không phải trên folder đích như code cũ đoán). Lỗi "Not Enough Parameters" trước đây đúng nghĩa đen — code cũ chỉ truyền 1 tham số. Live-test: tạo bin `Test Move Bin`, move `icon.png` vào, verify qua `get_project_info`.
+
+**3. `get_clip_metadata`/`set_clip_metadata` — FIX + LIVE-TESTED.** XMP metadata KHÔNG nằm trên `ProjectItem` (đúng như đã xác nhận trước đây không tìm thấy) mà nằm trên namespace tĩnh riêng `ppro.Metadata`: `ppro.Metadata.getXMPMetadata(projectItem)` / `ppro.Metadata.createSetXMPMetadataAction(projectItem, xmpString)`. Sau khi đổi API, phát hiện thêm 1 bug phụ trong code write cũ: chèn thẳng `<dc:field>` vào `rdf:Description` có sẵn nhưng node đó KHÔNG khai báo namespace `xmlns:dc` → Premiere âm thầm bỏ qua field khi lưu (API không báo lỗi nhưng field không thật sự lưu). Fix: tạo `rdf:Description` riêng có khai báo `xmlns:dc="http://purl.org/dc/elements/1.1/"`, Premiere tự merge vào node cũ (tự thêm xmlns:dc vào node gốc luôn). Phát hiện thêm bug đọc: `dc:description` theo chuẩn XMP là Language Alternative (`<dc:description><rdf:Alt><rdf:li xml:lang="x-default">giá trị</rdf:li></rdf:Alt></dc:description>`), không phải text phẳng như `dc:director` — regex đọc cũ chỉ bắt được text phẳng, đã thêm regex phụ bắt cấu trúc lồng `rdf:Alt/rdf:li`. Live-test: set `description`+`director`, đọc lại đúng cả 2, xem raw XMP xác nhận Premiere đã merge namespace đúng.
+
+**Bài học lớn nhất phiên này**: nghiên cứu tham khảo repo cộng đồng + đặc biệt **sample chính thức Adobe** hiệu quả hơn nhiều so với tự đoán chữ ký tham số qua thử-sai — 3 bug tồn đọng lâu nhất của dự án (đã từng thử 9+ tổ hợp tham số cho riêng `delete_clip`) đều giải quyết được trong 1 lần audit có định hướng rõ ràng (biết chính xác cần tìm gì).
+
+**Còn lại KHÔNG giải quyết được (đã audit xác nhận là giới hạn thật của cả hệ sinh thái, không phải do thiếu tìm kiếm)**:
+- MOGRT text content (`insert_mogrt_caption`/`srt_to_mogrt_captions`) — không repo nào kể cả sample Adobe có cách set text Essential Graphics qua UXP thuần.
+- Native caption track tạo qua script — xác nhận lại là ExtendScript-only, sample Transcript của Adobe (`ppro.Transcript.*`) chỉ có import/export JSON transcript, không có API tạo Caption Track.
+- `cut_clip_at_time` cần QE DOM — xác nhận không có repo UXP-first nào tránh được nhu cầu QE DOM cho thao tác cắt/trim nâng cao; chấp nhận giữ QE DOM cho riêng tool này.
+
+## 🆕 Đề xuất tool mới từ audit 5 repo (chưa code, ưu tiên thấp/trung bình)
+
+Từ mục "Capabilities we're missing entirely" trong `AUDIT_5_REPOS.md` — không urgent, ghi lại để cân nhắc sau:
+- **Proxy media management** (create/attach/toggle proxy) — antipaster + ayushozha có, mình chưa có tool nào tương đương. Ưu tiên thấp.
+- **Export interchange formats** (`export_as_fcpxml`/`export_as_aaf`/`export_as_omf`) — hetpatel-11 + sample Adobe official hỗ trợ AAF/FCPXML/OTIO, mình chỉ có `export_as_xml` (Premiere native XML). Cân nhắc nếu cần trao đổi project với DaVinci/FCP/Avid.
+- **`batch_set_metadata`** (đổi metadata hàng loạt nhiều clip) — sample `metadata-handler` chính thức Adobe có logic `batchUpdate.js` — nên khai thác vì `get/set_clip_metadata` đã fix xong (2026-09-14). Ưu tiên trung bình.
+- **`create_project_checkpoint`/`restore_checkpoint`** — CaYatur có pattern lưu snapshot trước thao tác rủi ro rồi cho phục hồi — hữu ích để bọc quanh `delete_clip`/`ripple_delete` vừa fix, giảm rủi ro thao tác sai. Ưu tiên trung bình.
+- **Đã verify KHÔNG có gap**: scene/silence detection (hetpatel-11, ayushozha có tương tự) — mình đã có `detect_scene_edits`/`detect_silence_regions`/`remove_silence_gaps`, chỉ cần test chứ không cần tool mới.
+
+## ✅ Quyết định kiến trúc — giữ UXP-only, KHÔNG hybrid CEP (2026-09-14)
+
+User hỏi kỹ UXP vs CEP vs .ccx trước khi quyết định. Tóm tắt (chi tiết đầy đủ trong Claude memory `references/uxp-vs-cep-capabilities.md` + `projects/premiere-mcp.md`):
+
+- **.ccx không phải công nghệ khác** — chỉ là file đóng gói CÙNG code UXP (qua nút Package trong UXP Developer Tool). Không có live-reload như UDT+Watch — mỗi lần fix phải Package lại + cài lại. Dùng .ccx khi code đã ổn định để phân phối, không phải vòng lặp sửa lỗi hàng ngày.
+- **CEP làm được 3 việc UXP không làm được** (xác nhận qua audit 4 repo cộng đồng): tạo native caption track (`Sequence.createCaptionTrack`, ExtendScript-only), add/delete/lock track (leancoderkavy+hetpatel expose qua CEP+QE DOM), có thể cả set text MOGRT (ayushozha claim, chưa xác nhận chắc là UXP thật hay vẫn cần CEP).
+- **Quyết định: KHÔNG làm hybrid UXP+CEP.** Lý do: (1) CEP đang bị Adobe khai tử dần, (2) thêm 1 bridge = thêm phức tạp bảo trì cho chỉ 2-3 tính năng, (3) bản kế hoạch rebuild cũ cũng khuyến nghị CEP chỉ là "reference", không phải kiến trúc mục tiêu. Nếu sau này thật sự cần, làm CEP extension riêng biệt tối giản (như Mic Check đã tách riêng), không hợp nhất vào plugin UXP chính.
+- **Copy code từ 4 repo đã audit (MIT license)**: được phép về pháp lý (giữ notice bản quyền), nhưng PHẢI live-test lại trên máy mình — không tin claim "verified" của họ (bài học lặp lại nhiều lần trong dự án này).
+
+## ✅ Batch tool mới từ AUDIT_MASTER_TOOL_LIST.md — ĐÃ LIVE-TEST ĐẦY ĐỦ 9/9, 3 BUG FIX MỚI (2026-09-14)
+
+Sau restart Claude, live-test toàn bộ 9 tool mới trên sequence test sạch (`MCP Tool Test 2026-09-14`, tạo riêng trong `Test MCP.prproj` để không đụng sequence thật — user xác nhận data trong file này an toàn để test).
+
+**Kết quả — 9/9 tool hoạt động đúng sau khi fix 2 bug phát sinh:**
+- `list_sequence_tracks`, `get_track_info`, `rename_track` — đúng, verify read-back thật (`actualName` khớp).
+- `roll_edit` — đúng, verify `actualLeftEnd`/`actualRightStart` khớp thật (test 2 clip liền kề 0-5s/5-10s, dời điểm cắt 5s→6s → ra đúng 0-6s/6-10s).
+- `save_project` — đúng, `saved:true`.
+- `save_project_as` — đúng, nhưng **lưu ý hành vi**: giống Premiere thật, sau khi Save As, project ĐANG MỞ chuyển hẳn sang file mới (`get_project_info` xác nhận `projectPath` đổi) — không phải "lưu bản sao rồi vẫn ở file cũ". Nếu dùng tool này, project gốc sẽ không còn là project active nữa.
+- `get_keyframes`, `get_value_at_time`, `set_keyframe_interpolation`, `remove_keyframe`, `remove_keyframe_range` — đúng SAU KHI fix 2 bug dưới đây (trước khi fix, `get_keyframes` báo đúng `count:0` vì keyframe thật sự chưa từng được tạo — không phải bug của riêng nó).
+
+### 🐛 Bug 1 (ĐÃ FIX) — `set_effect_param(timeSeconds=...)` không tạo keyframe thật, chỉ ghi đè giá trị tĩnh
+
+Phát hiện khi verify chéo: set 2 "keyframe" (0s=10, 3s=50) qua `set_effect_param`, nhưng `get_keyframes` báo `count:0` và `get_value_at_time` tại MỌI thời điểm đều trả về 50 (giá trị set sau cùng) — chứng tỏ không có keyframe thật, chỉ là static value bị ghi đè liên tục.
+
+**Root cause**: `setEffectParam()` (`plugin/premiereActions.js`) gọi thẳng `createAddKeyframeAction` mà **thiếu bước bật `param.createSetTimeVaryingAction(true)`** trước đó — không bật "time-varying" (stopwatch) thì add keyframe chỉ set giá trị tĩnh, không tạo animation thật. Pattern đúng đã có sẵn từ code Beat Shake cũ trong cùng file (dòng ~1216) nhưng `setEffectParam` (viết sau, dùng cho tool `set_effect_param` generic) không áp dụng.
+
+**Đã fix**: thêm `if (timeSeconds != null) compoundAction.addAction(param.createSetTimeVaryingAction(true));` trước khi add keyframe, chỉ khi có `timeSeconds` (giữ nguyên hành vi static-set khi không truyền).
+
+**Live-tested lại sau fix**: set lại 2 keyframe (0s=10, 3s=50) → `get_keyframes` trả đúng `count:2` với giá trị khớp; `get_value_at_time(1.5s)` = 30 (đúng nội suy linear giữa 10 và 50).
+
+**⚠️ Ảnh hưởng ngược**: bug này tồn tại từ khi `set_effect_param` được viết (trước 2026-09-14) — nghĩa là **MỌI lần dùng `set_effect_param` với `timeSeconds` trước ngày fix này đều KHÔNG tạo keyframe thật**, kể cả khi tool báo `set:true` + `actualValueReadBack` đúng (vì đọc lại giá trị tĩnh tại đúng thời điểm đó vẫn khớp, dễ đánh lừa). Nếu có workflow cũ dựa vào animation/keyframe qua `set_effect_param`, cần chạy lại.
+
+### 🐛 Bug 2 (ĐÃ FIX) — `remove_keyframe` crash "start time should be less than stoptime"
+
+`removeKeyframe()` gọi `param.createRemoveKeyframeRangeAction(atTick, atTick, true)` — truyền CÙNG 1 tick cho start và end để xoá đúng 1 keyframe tại 1 thời điểm, nhưng API native đòi `start < stop` NGHIÊM NGẶT, không chấp nhận range rỗng/bằng nhau.
+
+**Đã fix**: pad ±1ms quanh thời điểm cần xoá (`secondsToTick(timeSeconds + clipInPoint.seconds ± 0.001)`) — nhỏ hơn nhiều khoảng cách 1 frame thực tế ở mọi fps thường dùng nên chỉ trúng đúng keyframe mục tiêu, không ăn nhầm keyframe lân cận.
+
+**Live-tested lại sau fix**: xoá keyframe tại 3s → `countBefore:2, countAfter:1` đúng. `remove_keyframe_range(2s→5s)` cũng test kèm (dùng chung pattern range thật, không bị bug này) → xoá đúng 1/1 keyframe trong khoảng, giữ lại keyframe ở 0s ngoài khoảng.
+
+### ✅ Bug 3 (ĐÃ FIX, LIVE-TESTED) — `slip_edit` dịch cả VỊ TRÍ timeline thay vì chỉ dịch nguồn (source)
+
+Mô tả tool: "dịch in/out điểm nguồn... GIỮ NGUYÊN vị trí và thời lượng trên timeline". Live-test lần đầu (ảnh tĩnh `icon.png`, 0-6s) → `slip_edit(offsetSeconds:1)` dịch clip sang **1-6s** — sai.
+
+**Live-test lại với clip VIDEO THẬT** (`keo BG ingame.mp4`, không phải ảnh tĩnh) để loại trừ khả năng bug chỉ riêng still-image: cùng hành vi sai xảy ra — clip 0-10.07s → `slip_edit(offsetSeconds:1)` → dịch sang 1-11.07s. **Xác nhận đây là bug CHUNG của `createSetInPointAction`/`createSetOutPointAction`**, không phải riêng ảnh tĩnh: 2 API này không chỉ đổi source trim như tài liệu ngầm định, mà còn dịch luôn `getStartTime()`/`getEndTime()` (vị trí timeline) đúng bằng offset.
+
+**Đã fix**: sau khi set In/Out point, đọc lại `getStartTime()`, tính độ lệch (`driftSeconds`) so với vị trí gốc trước khi set, rồi gọi `createMoveAction(-driftSeconds)` để bù lại đúng vị trí ban đầu (dùng lại pattern offset-based đã verify đúng nhiều lần ở `insert_clip`/`move_clip`). Trả thêm field `actualStartSeconds` + `driftCompensatedSeconds` để verify.
+
+**Live-tested lại sau fix** (clip video thật): gọi `slip_edit(offsetSeconds:1)` 2 lần liên tiếp trên clip đang ở vị trí 1-11.07s → `driftCompensatedSeconds:1` (đúng bằng độ lệch bị bù), `actualStartSeconds:1` (không đổi), verify độc lập qua `get_selected_clips`: `startSeconds:1, durationSeconds:10.067` — vị trí/thời lượng giữ nguyên hoàn toàn đúng như kỳ vọng, chỉ source in/out dịch (1→2s, 11.07→12.07s).
+
+### Ghi chú phụ (không chặn, phát hiện tình cờ lúc test)
+
+- `search_effects` lỗi `"Cannot read properties of null (reading 'toLowerCase')"` khi gọi với query "gaussian blur" — bug riêng, chưa điều tra (không nằm trong scope 9 tool mới đợt này).
+- `apply_effect` trả `componentIndex: -1` dù áp effect thành công thật (verify qua `get_clip_effects` thấy effect có mặt đúng ở index 2) — có thể chỉ là field không được tính đúng, không ảnh hưởng chức năng chính, nhưng đáng nghi nếu code khác dựa vào `componentIndex` trả về từ tool này.
+
+### Dọn dẹp còn sót lại từ đợt test này
+
+- File `Test MCP.prproj` gốc: lúc test đã `save_project` MỘT LẦN khi project này đang active (trước khi `save_project_as`) — nghĩa là sequence test `MCP Tool Test 2026-09-14` (đã đổi tên track Video 1 thành "MCP Test Track") **có thể vẫn còn tồn tại trong file `Test MCP.prproj` gốc trên đĩa** (không tự dọn được vì `open_project` chỉ là stub, không thể mở lại project khác qua script sau khi đã `save_project_as` chuyển active project đi). Cần mở tay `Test MCP.prproj` trong Premiere, xoá sequence `MCP Tool Test 2026-09-14` nếu còn, đổi tên track Video 1 về lại "Video 1" nếu cần.
+- File mới phát sinh `Test MCP - saveas test.prproj` (tạo ra để test `save_project_as`) — đã dọn sequence test + save sạch, nhưng bản thân file này là bản sao thừa của `Test MCP.prproj`, có thể xoá tay nếu không cần giữ.
+- Project hiện đang mở trong Premiere (cuối phiên test) là `Test MCP - saveas test.prproj`, KHÔNG phải `Test MCP.prproj` — nếu muốn quay lại làm việc trên file gốc, cần tự mở tay lại trong Premiere (File > Open Project).
+
+**1. Keyframe (5 tool mới)** — `get_keyframes`, `remove_keyframe`, `remove_keyframe_range`, `get_value_at_time`, `set_keyframe_interpolation`. API dùng lại nguyên xi từ code Beat Shake cũ đã merge vào file này (đã verify chạy được thật trước đây): `createKeyframe`/`createAddKeyframeAction`/`getKeyframeListAsTickTimes`/`createRemoveKeyframeRangeAction`/`createSetInterpolationAtKeyframeAction`/`getValueAtTime`. Tick = `clip.getInPoint().seconds + timeSeconds` (source-time, giống `set_effect_param`). `add_keyframe` KHÔNG cần tool riêng — đã có sẵn qua `set_effect_param(matchName, paramName, value, timeSeconds)`.
+
+**2. Track management — PHÁT HIỆN QUAN TRỌNG: hầu hết KHÔNG THỂ làm qua UXP.** Probe trực tiếp prototype Sequence/Track/SequenceEditor (qua sentinel tạm trong `mute_track`, đã dọn) xác nhận: Sequence chỉ có `getVideoTrackCount/getAudioTrackCount/getVideoTrack/getAudioTrack/getCaptionTrack` (thuần đọc), Track chỉ có `createSetNameAction/setMute/getMediaType/getIndex/isMuted/getTrackItems` — **KHÔNG có bất kỳ API nào cho add/delete/lock/toggle-visibility/set-target track**. Xác nhận là giới hạn thật, không phải chưa tìm ra — loại bỏ khỏi danh sách "đề xuất", không code tiếp các tool này.
+- **Bonus fix quan trọng**: `mute_track` (tool cũ, chưa từng live-test) dùng nhầm `track.createSetMuteAction()` — **KHÔNG tồn tại**. Sửa sang `track.setMute(muted)` gọi trực tiếp (không qua transaction). **LIVE-TESTED NGAY** (tool cũ, không cần restart): mute→true rồi unmute→false, cả 2 lần đều verify đúng qua `actualMuted`.
+- Đã thêm 3 tool mới khả thi: `get_track_info` (đọc tên/mute/số clip 1 track), `list_sequence_tracks` (liệt kê tất cả), `rename_track` (qua `createSetNameAction`, đã xác nhận có thật).
+
+**3. Project lifecycle (2 tool mới)** — `save_project`/`save_project_as`. Xác nhận `project.save()`/`project.saveAs(path)` có thật trên `Project.prototype` (probe trực tiếp qua `debug_probe_api`, đã dọn debug). Trước đây dự án không có cách nào lưu project qua MCP.
+
+**4. Editing precision (2 tool mới)** — `roll_edit`, `slip_edit`. KHÔNG cần API mới — dựng từ các primitive đã verify đúng nhiều lần: `roll_edit` = `createSetEndAction` (clip trái) + `createSetStartAction` (clip phải) trong CÙNG 1 transaction; `slip_edit` = `createSetInPointAction`/`createSetOutPointAction` cùng lúc (dịch nguồn, giữ nguyên vị trí/thời lượng timeline — khác `trim_clip` đổi cả 2). `slide_edit` chưa làm (phức tạp hơn — cần tìm + điều chỉnh cả 2 clip liền kề khi dời clip giữa), để lại cho đợt sau.
+
+**Việc còn lại sau khi user restart Claude**: live-test đầy đủ 9 tool mới (5 keyframe + 3 track + save_project×2 + roll/slip edit), cập nhật Sheet + TODO.md với kết quả thật.
+
+## ✅ Ưu tiên 3 — Batch test ~40 tool còn lại — HOÀN THÀNH, NHIỀU BUG FIX MỚI (2026-09-14)
+
+Live-test trên sequence tạm `MCP Batch Test 2026-09-14` (đã xoá sau khi xong) với clip video thật (`keo BG ingame.mp4`) + audio thật (`file test mp3.MP3`) — không dùng data giả vì nhiều bug chỉ lộ ra với clip video/audio thật (vd `slip_edit`, xem mục Bug 3 phía trên).
+
+### 🐛 Bug mới tìm ra + ĐÃ FIX
+
+1. **`search_effects` crash "Cannot read properties of null"`** — `server/src/tools/premiere-tools.js`: filter gọi `e.matchName.toLowerCase()` trực tiếp, crash khi effect audio có `matchName: null` (effect audio dùng `useDisplayName` thay vì matchName — xem ghi chú cũ). Fix: `(e.matchName ?? '').toLowerCase()` cho cả 3 field so khớp. **⚠️ Cần restart server MCP (`node server/index.js`, hoặc restart app Claude) mới có hiệu lực** — chưa verify lại được trong phiên này vì restart sẽ mất kết nối toàn bộ tool `premiere__*` đang dùng.
+
+2. **`set_clip_color_label` — logic if/else bị đảo ngược hoàn toàn + API giả định sai.** Code cũ: nếu `projectItem.setColorLabel` LÀ function thì lại gọi `createSetColorLabelAction`, nếu KHÔNG PHẢI function thì lại gọi thẳng `projectItem.setColorLabel()` — ngược hoàn toàn logic đúng. Probe trực tiếp xác nhận: chỉ có `createSetColorLabelAction` (action-based) + `getColorLabelIndex()` (đọc), **không có** `setColorLabel` nào cả. Đã viết lại dùng đúng API, verify qua `actualColorIndex`. Live-tested: `iris` → `actualColorIndex:2` đúng.
+
+3. **`adjust_color_values`/`apply_lumetri_preset` — matchName sai hoàn toàn.** Code dùng `"ADBE Lumetri Color"` — tên này **KHÔNG TỒN TẠI** trong `VideoFilterFactory.getMatchNames()` thật (lỗi native "No video filter found", bị che dấu thành "undefined" vì lỗi ném ra là STRING không phải Error object nên `e.message` luôn `undefined` — xem bug 4). Probe ra tên thật: **`AE.ADBE Lumetri`**. Đã sửa cả 2 hàm + entry sai trong `server/src/data/premiere-effects.js`. Live-tested: `adjust_color_values(exposure:0.5,...)` → verify qua `get_value_at_time` = 0.5 đúng.
+
+4. **`applyEffect()`/`findComponentByMatchName()` — bug nền tảng ảnh hưởng NHIỀU tool.** 2 lỗi chồng nhau:
+   - Lỗi native khi `VideoFilterFactory.createComponent(matchName)` thất bại là **string ném thẳng ra**, không phải Error object → `e2.message` luôn `undefined`, che mất lý do thật. Đã sửa để bắt cả 2 dạng lỗi.
+   - `findComponentByMatchName()` so khớp EXACT STRING — nhưng Premiere LƯU matchName effect đã áp với prefix `"AE."` (vd `"AE.ADBE Gaussian Blur 2"`) trong khi lúc GỌI apply lại dùng tên KHÔNG prefix. Kết quả: check "đã có effect chưa" ở đầu `applyEffect()` luôn báo sai (không thấy effect dù đã có), và field `componentIndex` trả về **luôn là -1** dù apply thành công thật (đã ghi nhận là "note phụ" ở batch test 9 tool trước, giờ hiểu rõ nguyên nhân). Đã sửa `findComponentByMatchName()` so khớp linh hoạt bỏ qua prefix `AE.`. Live-tested: apply lại `ADBE Gaussian Blur 2` lần 2 → đúng báo `alreadyExists:true`; `componentIndex` giờ trả đúng số thật (3) thay vì -1.
+
+5. **`detect_silence_regions`/`remove_silence_gaps` — lỗi double-encode URL khi đọc file có dấu cách trong path.** `pathToFileUrl()` tự percent-encode (` ` → `%20`), nhưng `uxpFs.getEntryWithUrl()` encode THÊM 1 lần nữa → URL hỏng dạng `%2520`, báo "Could not find an entry". Bug này đã được ghi chú từ 2026-09-10 (đã fix ở `readTextFile` riêng) nhưng CHƯA áp dụng cho đường đọc audio dùng chung bởi `detect_silence_regions`/`remove_silence_gaps`/Beat Shake cũ. Đã thêm hàm `pathToRawFileUrl()` dùng thống nhất cho MỌI lần gọi `getEntryWithUrl()`. Live-tested: lỗi encode biến mất, tool giờ đọc được file `.MP3` có dấu cách trong path.
+
+### 🔴 Giới hạn thật xác nhận sau bug fix trên (KHÔNG PHẢI bug, chỉ chưa cài)
+
+`detect_silence_regions`/`remove_silence_gaps` sau khi hết lỗi encode thì lộ ra giới hạn CÓ TỪ TRƯỚC: thiếu hàm decode audio (`decodeAudioDataFromUint8`/`decodeToFloat32Mono` — grep toàn repo xác nhận CHƯA TỪNG được viết ở đâu, chỉ được gọi). Cần implement 1 audio decoder WAV/MP3 riêng cho môi trường UXP (việc lớn, ngoài phạm vi phiên fix bug này) — tạm thời 2 tool này vẫn KHÔNG dùng được dù đường đọc file đã thông.
+
+### 🔴 Bug mới CHƯA FIX (đã điều tra sâu, để lại cho phiên sau)
+
+**`set_clip_pan`** — clip audio stereo không có sẵn component Panner/Balance (chỉ có "Internal Volume Stereo"/"Internal Channel Volume Stereo"). Đã sửa để tự thêm effect "Balance" qua `AudioFilterFactory.createComponentByDisplayName("Balance")` (xác nhận chữ ký đúng, chỉ nhận 1 tham số string) — effect được thêm thành công thật (verify qua `get_clip_effects`-style dump: có component "Balance" với param con "Balance" hiển thị đúng). NHƯNG **ghi giá trị vào param "Balance" của component mới thêm này hoàn toàn không có tác dụng** — đã thử 4 biến thể (giá trị -50%/-0.5 chuẩn hoá, tại `clip.getInPoint()`/tick 0, có/không bật `createSetTimeVaryingAction`) — tất cả đều đọc lại ra 0, dù `getKeyframeListAsTickTimes()` xác nhận CÓ 1 keyframe được tạo (chỉ là bản thân keyframe đó mang giá trị 0, không phải giá trị đã gửi). Nghi ngờ component audio filter thêm mới qua `AudioFilterFactory` không nhận write theo pattern `createKeyframe`/`createAddKeyframeAction` giống component video — cần điều tra thêm (có thể cần API set value khác dành riêng cho audio, hoặc effect cần "khởi tạo" theo cách khác). Code hiện tại throw lỗi rõ ràng thay vì báo thành công giả.
+
+### ✅ Xác nhận hoạt động đúng (không cần sửa)
+
+`remove_effect`, `set_clip_metadata`/`get_clip_metadata` (verify qua raw XMP), `list_available_transitions` (155 kết quả live thật, không phải database tĩnh dù mô tả tool ghi "offline" — note phụ, không urgent), `move_item_to_bin` (đã fix từ trước, test lại vẫn đúng), `set_clip_volume` (lần đọc "0" đầu tiên là fluke, retry 2 lần đều đúng), `import_mogrt`/`import_srt` (import vào Project đúng, nhưng KHÔNG tự đặt lên timeline dù mô tả `import_mogrt` ngụ ý có — chỉ `import_srt` mô tả đúng thực tế "thêm vào caption track" cần thao tác tay), `relink_offline_media` (báo đúng `relinked:0` khi không có media offline).
+
+### 🟡 Xác nhận là stub cố định (API UXP chưa hỗ trợ ở bản Premiere này — code đã xử lý gracefully, KHÔNG throw lỗi mù mờ)
+
+`capture_frame`, `detect_scene_edits`, `add_transition`, `batch_add_transitions`, `set_clip_speed`, `reverse_clip`, `freeze_frame`, `create_caption_track`, `replace_clip_media`, `export_as_xml` — tất cả trả `applied/saved/created/exported: false` kèm message hướng dẫn thao tác tay rõ ràng, không phải bug (đã kiểm code: mỗi hàm đều check `typeof x.API === "function"` trước, fallback đúng khi API không tồn tại). `cut_clip_at_time` xác nhận lại cần QE DOM (giới hạn đã biết từ trước, không đổi).
+
+### Chưa test (bỏ qua trong phiên này — cần audio giọng nói thật, tốn thời gian)
+
+`transcribe_clip`, `auto_caption_from_speech`, `import_transcript_json`, `setup_audio_ducking`, `export_to_media_encoder`.
+
+(`move_clip`, `trim_clip`, `duplicate_clip` đã live-tested xong 2026-09-14 — xem các mục bug fix phía trên. `delete_clip`/`ripple_delete` đã test và xác nhận HỎNG — xem mục 🔴 riêng phía trên.)
 
 Bỏ qua (đã biết là stub cố định, không cần test): `add_text_overlay`, `open_project`.
 
-**Lưu ý khi test**: nếu tool "không báo lỗi nhưng cũng không thấy tác dụng gì", nghi ngờ chính code xác minh (verify) trước khi kết luận API bị hỏng — bài học từ `create_sequence`/`duplicate_sequence` (chẩn nhầm lỗi) và `select_all_clips` (báo thành công giả vì lỗi bị nuốt trong try/catch rỗng).
+**Lưu ý khi test**: nếu tool "không báo lỗi nhưng cũng không thấy tác dụng gì", nghi ngờ chính code xác minh (verify) trước khi kết luận API bị hỏng — bài học từ `create_sequence`/`duplicate_sequence` (chẩn nhầm lỗi) và `select_all_clips` (báo thành công giả vì lỗi bị nuốt trong try/catch rỗng). Bài học mới đợt này: đọc lại giá trị ĐÚNG VỊ TRÍ trong code (sau khi set, không phải trước) — 1 lần debug bị nhầm vì đặt điểm đọc trước bước ghi.
 
 ## Dọn dẹp thủ công trong Premiere (không tự động hóa vì rủi ro)
 
+- Trong `Test MCP - saveas test.prproj` (project đang mở cuối phiên 2026-09-14): `icon.png` bị move vào bin `VN - WAG - BOOYAH-` lúc test `move_item_to_bin`, `Basic Title.mogrt` + `test.srt` bị import vào root Project panel lúc test `import_mogrt`/`import_srt` — an toàn xoá tay nếu không cần giữ (chỉ là item test, không ảnh hưởng sequence thật).
+- Bin `Test Move Bin` trong `Test MCP.prproj` — tạo lúc test lại `move_item_to_bin` 2026-09-10, an toàn xoá (dùng chính `delete_clip`/xoá tay).
 - Vài clip `icon.png` rác quanh mốc ~3599-3600s trên video track 0 của sequence "Active Sequence" và "test 1" trong `test mới.prproj` (project cũ, không phải `Premiere test.prproj` hiện tại).
 - Bin thừa `MCP Test Bin` trong `Premiere test.prproj` — tạo lúc test `create_bin` 2026-09-10, an toàn xoá.
 - Sequence test dư trong `Premiere test.prproj`: `Test 2` (đã dùng để test insert_clip/select_all_clips, có 1 clip icon.png @0s), `MCP Test 60fps v2` (đổi thành 23.976fps lúc test set_sequence_frame_rate), `MCP Test Tiktok 60fps` — tất cả an toàn xoá, không còn cần giữ.

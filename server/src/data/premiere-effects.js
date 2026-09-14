@@ -44,7 +44,10 @@ export const EFFECTS_DB = [
   { displayName: "Matte Choker", matchName: "ADBE Matte Choker", category: "Channel" },
 
   // --- Color Correction ---
-  { displayName: "Lumetri Color", matchName: "ADBE Lumetri Color", category: "Color Correction" },
+  // matchName thật xác nhận qua probe VideoFilterFactory.getMatchNames() 2026-09-14: "AE.ADBE
+  // Lumetri" — "ADBE Lumetri Color" (tên cũ ở đây) KHÔNG tồn tại, gây lỗi "No video filter found"
+  // khi apply_effect/adjust_color_values/apply_lumetri_preset dùng tên này.
+  { displayName: "Lumetri Color", matchName: "AE.ADBE Lumetri", category: "Color Correction" },
   { displayName: "Fast Color Corrector", matchName: "ADBE Fast Color Corrector", category: "Color Correction" },
   { displayName: "Three-Way Color Corrector", matchName: "ADBE Three-Way Color", category: "Color Correction" },
   { displayName: "Brightness & Contrast", matchName: "ADBE Brightness & Contrast 2", category: "Color Correction" },

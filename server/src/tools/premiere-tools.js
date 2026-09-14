@@ -18,6 +18,30 @@ export const PREMIERE_TOOLS = [
   },
 
   {
+    name: 'save_project',
+    description: 'Lưu project Premiere đang mở (ghi đè file .prproj hiện tại).',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('save_project', {}, 20000);
+    }
+  },
+
+  {
+    name: 'save_project_as',
+    description: 'Lưu project đang mở sang 1 đường dẫn .prproj mới.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        filePath: { type: 'string', description: 'Đường dẫn tuyệt đối file .prproj mới.' }
+      },
+      required: ['filePath']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('save_project_as', { filePath: args.filePath }, 20000);
+    }
+  },
+
+  {
     name: 'import_files',
     description: 'Import file vào Project panel của Premiere Pro. Hỗ trợ video, audio, ảnh, subtitle, MOGRT. Tùy chọn chỉ định bin đích. Trả về danh sách file đã import thành công và file bị bỏ qua (đã tồn tại hoặc lỗi).',
     inputSchema: {
@@ -150,6 +174,42 @@ export const PREMIERE_TOOLS = [
   },
 
   {
+    name: 'roll_edit',
+    description: 'Dời điểm cắt chung giữa 2 clip liền kề trên cùng 1 track (kéo dài clip trái, rút ngắn clip phải hoặc ngược lại), giữ nguyên vị trí clip khác. Cần đúng 2 clip liền kề tại editTimeSeconds.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        trackIndex: { type: 'number', description: 'Index track chứa 2 clip (0-based).' },
+        trackType: { type: 'string', enum: ['video', 'audio'], description: 'Mặc định "video".' },
+        editTimeSeconds: { type: 'number', description: 'Vị trí điểm cắt hiện tại (giây) giữa 2 clip.' },
+        newTimeSeconds: { type: 'number', description: 'Vị trí điểm cắt mới (giây).' }
+      },
+      required: ['trackIndex', 'editTimeSeconds', 'newTimeSeconds']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('roll_edit', {
+        trackIndex: args.trackIndex, trackType: args.trackType,
+        editTimeSeconds: args.editTimeSeconds, newTimeSeconds: args.newTimeSeconds
+      }, 15000);
+    }
+  },
+
+  {
+    name: 'slip_edit',
+    description: 'Dịch cả in/out điểm nguồn của clip đang chọn (đổi nội dung hiển thị) nhưng GIỮ NGUYÊN vị trí và thời lượng trên timeline — khác trim_clip (đổi cả vị trí/thời lượng).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        offsetSeconds: { type: 'number', description: 'Độ lệch (giây) áp cho cả in-point và out-point nguồn. Dương = lùi nội dung về sau.' }
+      },
+      required: ['offsetSeconds']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('slip_edit', { offsetSeconds: args.offsetSeconds }, 15000);
+    }
+  },
+
+  {
     name: 'move_clip',
     description: 'Di chuyển clip đang chọn đến vị trí thời gian mới trên timeline. Truyền startSeconds để set thời điểm bắt đầu mới, tùy chọn trackIndex để đổi track.',
     inputSchema: {
@@ -273,9 +333,9 @@ export const PREMIERE_TOOLS = [
       }
 
       const results = source.filter(e =>
-        e.displayName.toLowerCase().includes(q) ||
-        e.matchName.toLowerCase().includes(q) ||
-        e.category.toLowerCase().includes(q)
+        (e.displayName ?? '').toLowerCase().includes(q) ||
+        (e.matchName ?? '').toLowerCase().includes(q) ||
+        (e.category ?? '').toLowerCase().includes(q)
       ).slice(0, args.limit ?? 20);
       return { effects: results, total: results.length, query: args.query, source: source === EFFECTS_DB ? 'static' : 'live' };
     }
@@ -339,6 +399,100 @@ export const PREMIERE_TOOLS = [
         value: args.value,
         timeSeconds: args.timeSeconds
       }, 20000);
+    }
+  },
+
+  {
+    name: 'get_keyframes',
+    description: 'Đọc danh sách keyframe hiện có trên 1 parameter của effect trên clip đang chọn (thời gian tính theo giây tương đối trong clip, 0 = đầu clip).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        matchName: { type: 'string', description: 'FilterMatchName của effect trên clip (lấy từ get_clip_effects).' },
+        paramName: { type: 'string', description: 'Tên hiển thị của parameter, ví dụ "Scale", "Opacity".' }
+      },
+      required: ['matchName', 'paramName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('get_keyframes', { matchName: args.matchName, paramName: args.paramName }, 15000);
+    }
+  },
+
+  {
+    name: 'remove_keyframe',
+    description: 'Xoá 1 keyframe tại thời điểm cụ thể trên 1 parameter của clip đang chọn.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        matchName: { type: 'string', description: 'FilterMatchName của effect trên clip.' },
+        paramName: { type: 'string', description: 'Tên hiển thị của parameter.' },
+        timeSeconds: { type: 'number', description: 'Thời điểm keyframe cần xoá (giây, tương đối trong clip).' }
+      },
+      required: ['matchName', 'paramName', 'timeSeconds']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('remove_keyframe', {
+        matchName: args.matchName, paramName: args.paramName, timeSeconds: args.timeSeconds
+      }, 15000);
+    }
+  },
+
+  {
+    name: 'remove_keyframe_range',
+    description: 'Xoá toàn bộ keyframe trong 1 khoảng thời gian trên 1 parameter của clip đang chọn.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        matchName: { type: 'string', description: 'FilterMatchName của effect trên clip.' },
+        paramName: { type: 'string', description: 'Tên hiển thị của parameter.' },
+        startSeconds: { type: 'number', description: 'Bắt đầu khoảng cần xoá (giây, tương đối trong clip).' },
+        endSeconds: { type: 'number', description: 'Kết thúc khoảng cần xoá (giây, tương đối trong clip).' }
+      },
+      required: ['matchName', 'paramName', 'startSeconds', 'endSeconds']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('remove_keyframe_range', {
+        matchName: args.matchName, paramName: args.paramName, startSeconds: args.startSeconds, endSeconds: args.endSeconds
+      }, 15000);
+    }
+  },
+
+  {
+    name: 'get_value_at_time',
+    description: 'Đọc giá trị nội suy (interpolated) của 1 parameter tại 1 thời điểm cụ thể trên clip đang chọn. Bỏ trống timeSeconds để đọc giá trị tại in-point.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        matchName: { type: 'string', description: 'FilterMatchName của effect trên clip.' },
+        paramName: { type: 'string', description: 'Tên hiển thị của parameter.' },
+        timeSeconds: { type: 'number', description: 'Thời điểm cần đọc (giây, tương đối trong clip). Bỏ trống = đầu clip.' }
+      },
+      required: ['matchName', 'paramName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('get_value_at_time', {
+        matchName: args.matchName, paramName: args.paramName, timeSeconds: args.timeSeconds
+      }, 15000);
+    }
+  },
+
+  {
+    name: 'set_keyframe_interpolation',
+    description: 'Đổi kiểu interpolation (linear/bezier hoặc hold) của 1 keyframe đã có, tại 1 thời điểm cụ thể trên clip đang chọn.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        matchName: { type: 'string', description: 'FilterMatchName của effect trên clip.' },
+        paramName: { type: 'string', description: 'Tên hiển thị của parameter.' },
+        timeSeconds: { type: 'number', description: 'Thời điểm keyframe cần đổi (giây, tương đối trong clip).' },
+        mode: { type: 'string', enum: ['bezier', 'hold'], description: '"bezier" (mặc định, mượt) hoặc "hold" (giữ nguyên không chuyển tiếp).' }
+      },
+      required: ['matchName', 'paramName', 'timeSeconds']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_keyframe_interpolation', {
+        matchName: args.matchName, paramName: args.paramName, timeSeconds: args.timeSeconds, mode: args.mode
+      }, 15000);
     }
   },
 
@@ -420,6 +574,48 @@ export const PREMIERE_TOOLS = [
     },
     execute(wsBridge, args) {
       return wsBridge.sendCommand('mute_track', { trackIndex: args.trackIndex, muted: args.muted }, 10000);
+    }
+  },
+
+  {
+    name: 'get_track_info',
+    description: 'Đọc thông tin 1 track cụ thể (tên, mute, số clip) trong sequence đang active. LƯU Ý: không có API lock/toggle-visibility/target qua UXP — chỉ đọc được các field này.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        trackIndex: { type: 'number', description: 'Index track (0-based).' },
+        trackType: { type: 'string', enum: ['video', 'audio'], description: 'Mặc định "video".' }
+      },
+      required: ['trackIndex']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('get_track_info', { trackIndex: args.trackIndex, trackType: args.trackType }, 10000);
+    }
+  },
+
+  {
+    name: 'list_sequence_tracks',
+    description: 'Liệt kê toàn bộ video/audio track trong sequence đang active (tên, mute, số clip mỗi track).',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('list_sequence_tracks', {}, 10000);
+    }
+  },
+
+  {
+    name: 'rename_track',
+    description: 'Đổi tên 1 video/audio track trong sequence đang active.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        trackIndex: { type: 'number', description: 'Index track (0-based).' },
+        trackType: { type: 'string', enum: ['video', 'audio'], description: 'Mặc định "video".' },
+        newName: { type: 'string', description: 'Tên mới cho track.' }
+      },
+      required: ['trackIndex', 'newName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('rename_track', { trackIndex: args.trackIndex, trackType: args.trackType, newName: args.newName }, 10000);
     }
   },
 

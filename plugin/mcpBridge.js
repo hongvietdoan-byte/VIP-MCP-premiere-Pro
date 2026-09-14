@@ -182,12 +182,15 @@ function _sendReadyMessage() {
     capabilities: ["get_sequence_info", "get_selected_clips",
                    "ping", "get_plugin_status", "debug_get_element", "debug_inspect_chain",
                    "debug_probe_api", "debug_list_markers",
-                   "get_project_info", "import_files", "open_project",
+                   "get_project_info", "import_files", "open_project", "save_project", "save_project_as",
                    "cut_clip_at_time", "trim_clip", "delete_clip", "ripple_delete", "move_clip",
+                   "roll_edit", "slip_edit",
                    "detect_silence_regions", "remove_silence_gaps",
                    "apply_effect", "get_clip_effects", "set_effect_param", "remove_effect",
+                   "get_keyframes", "remove_keyframe", "remove_keyframe_range", "get_value_at_time", "set_keyframe_interpolation",
                    "list_installed_effects", "list_installed_transitions",
                    "set_clip_volume", "set_clip_pan", "mute_track", "setup_audio_ducking",
+                   "get_track_info", "list_sequence_tracks", "rename_track",
                    "add_transition", "batch_add_transitions",
                    "apply_lumetri_preset", "set_clip_color_label", "adjust_color_values",
                    "create_caption_track", "import_srt", "read_sequence_captions",
@@ -244,6 +247,8 @@ async function _dispatchCommand(msg) {
 
       // Group 1: Project & File
       case "get_project_info":       result = await getProjectInfo();                             break;
+      case "save_project":           result = await saveProject();                                break;
+      case "save_project_as":        result = await saveProjectAs(params);                        break;
       case "import_files":           result = await importFilesToProject(params);                  break;
       case "open_project":           result = await openProject(params);                           break;
 
@@ -252,6 +257,8 @@ async function _dispatchCommand(msg) {
       case "trim_clip":              result = await trimClip(params);                              break;
       case "delete_clip":            result = await deleteClip(params);                            break;
       case "ripple_delete":          result = await rippleDelete(params);                          break;
+      case "roll_edit":              result = await rollEdit(params, bLog);                        break;
+      case "slip_edit":              result = await slipEdit(params, bLog);                        break;
       case "move_clip":              result = await moveClip(params);                              break;
 
       // Group 3: Voice Cleanup
@@ -263,6 +270,11 @@ async function _dispatchCommand(msg) {
       case "get_clip_effects":       result = await getClipEffects();                             break;
       case "set_effect_param":       result = await setEffectParam(params, bLog);                 break;
       case "remove_effect":          result = await removeEffect(params, bLog);                   break;
+      case "get_keyframes":          result = await getKeyframes(params, bLog);                   break;
+      case "remove_keyframe":        result = await removeKeyframe(params, bLog);                 break;
+      case "remove_keyframe_range":  result = await removeKeyframeRange(params, bLog);            break;
+      case "get_value_at_time":      result = await getValueAtTime(params, bLog);                 break;
+      case "set_keyframe_interpolation": result = await setKeyframeInterpolation(params, bLog);   break;
       case "list_installed_effects":     result = await listInstalledEffects();                   break;
       case "list_installed_transitions": result = await listInstalledTransitions();               break;
 
@@ -271,6 +283,9 @@ async function _dispatchCommand(msg) {
       case "set_clip_pan":           result = await setClipPan(params, bLog);                     break;
       case "mute_track":             result = await muteTrack(params, bLog);                      break;
       case "setup_audio_ducking":    result = await setupAudioDucking(params, bLog);              break;
+      case "get_track_info":         result = await getTrackInfo(params);                         break;
+      case "list_sequence_tracks":   result = await listSequenceTracks();                         break;
+      case "rename_track":           result = await renameTrack(params);                          break;
 
       // Group 6: Transitions
       case "add_transition":         result = await addTransition(params, bLog);                  break;

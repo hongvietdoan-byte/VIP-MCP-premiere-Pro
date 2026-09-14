@@ -18,6 +18,16 @@ function pathToFileUrl(nativePath) {
   return isWindowsDrive ? ("file:///" + joined) : ("file://" + joined);
 }
 
+// uxpFs.getEntryWithUrl() TỰ percent-encode URL truyền vào — nếu URL đã encode sẵn (vd qua
+// pathToFileUrl(), " " → "%20") sẽ bị encode THÊM 1 LẦN NỮA thành "%2520", làm sai đường dẫn hoàn
+// toàn (lỗi thật: "Could not find an entry of 'file:///...%2520...'"). Xác nhận bug 2026-09-14 khi
+// live-test detect_silence_regions với file có dấu cách trong path. Dùng hàm này (URL RAW, có dấu
+// cách thật, không encode) cho MỌI lần đọc file qua getEntryWithUrl() — đã đúng từ trước ở
+// readTextFile(), giờ áp dụng thống nhất.
+function pathToRawFileUrl(nativePath) {
+  return "file:///" + nativePath.replace(/\\/g, "/");
+}
+
 async function getActiveSequenceAndSelection(log) {
   const project = await ppro.Project.getActiveProject();
   if (!project) throw new Error("Không tìm thấy project đang mở.");
@@ -297,7 +307,7 @@ async function getAudioBufferForClip(clip, log) {
   const mediaPath = await clipProjectItem.getMediaFilePath();
   log(`Đường dẫn media: ${mediaPath}`);
 
-  const fileUrl = pathToFileUrl(mediaPath);
+  const fileUrl = pathToRawFileUrl(mediaPath);
   let entry;
   try {
     entry = await uxpFs.getEntryWithUrl(fileUrl);
@@ -591,10 +601,18 @@ async function findComponentByName(clip, displayNameWanted) {
 async function findComponentByMatchName(clip, matchNameWanted) {
   const chain = await clip.getComponentChain();
   const count = await chain.getComponentCount();
+  // So khớp linh hoạt bỏ qua prefix "AE." (phát hiện 2026-09-14): Premiere LƯU matchName của effect
+  // đã áp với prefix "AE." (vd "AE.ADBE Gaussian Blur 2"), nhưng lúc TẠO qua VideoFilterFactory một
+  // số effect lại cần gọi bằng tên KHÔNG prefix (vd "ADBE Gaussian Blur 2"), số khác lại cần CÓ
+  // prefix (vd "AE.ADBE Lumetri"). Nếu so khớp exact string, gọi apply_effect/get_clip_effects/
+  // set_effect_param... bằng tên không cùng dạng với tên đã lưu sẽ không tìm thấy component dù nó có
+  // thật — từng gây bug "already exists" check sai + componentIndex:-1 giả ở applyEffect.
+  const normalize = (s) => (s.startsWith("AE.") ? s.slice(3) : s);
+  const wantedNorm = normalize(matchNameWanted);
   for (let i = 0; i < count; i++) {
     const comp = await chain.getComponentAtIndex(i);
     const mn = (typeof comp.getMatchName === "function") ? await comp.getMatchName() : comp.matchName;
-    if (mn === matchNameWanted) return comp;
+    if (mn === matchNameWanted || normalize(mn) === wantedNorm) return comp;
   }
   return null;
 }
@@ -1477,6 +1495,23 @@ async function getTrackItemsInRange(sequence, startTick, endTick, trackType) {
 // GROUP 1 — Project & File
 // ============================================================================
 
+// LƯU Ý 2026-09-14: project.save()/project.saveAs(path) CÓ THẬT trên Project.prototype (xác nhận
+// qua probe trực tiếp) — trước đây dự án không có tool save nào cả.
+async function saveProject() {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  await project.save();
+  return { saved: true };
+}
+
+async function saveProjectAs({ filePath }) {
+  if (!filePath) throw new Error("Phải truyền filePath.");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  await project.saveAs(filePath);
+  return { saved: true, filePath };
+}
+
 async function getProjectInfo() {
   const project = await ppro.Project.getActiveProject();
   if (!project) throw new Error("Không tìm thấy project đang mở.");
@@ -1614,70 +1649,56 @@ async function cutClipAtTime({ timeSeconds, trackType = "all" }) {
   );
 }
 
+// LƯU Ý 2026-09-14: createSetInPointAction/createSetOutPointAction chỉnh SOURCE TRIM (getInPoint/
+// getOutPoint = "relative to start time of the project item") — CÙNG LỚP BUG đã fix ở insert_clip
+// (xem TODO.md "Ưu tiên 1"), không phải vị trí timeline như tool này yêu cầu ("theo sequence time").
+// Live-test xác nhận: gọi trên clip ảnh tĩnh ném lỗi native "A nullptr was dereferenced" (source
+// media của still image không có in/out point hợp lệ theo nghĩa đó). API đúng — đối xứng với
+// getStartTime()/getEndTime() — là createSetStartAction()/createSetEndAction() (đã dùng đúng ở
+// insertOrOverwriteClip cho end time, giờ áp dụng thêm cho start time + tách riêng cho trim_clip).
 async function trimClip({ inSeconds, outSeconds }) {
   if (inSeconds == null && outSeconds == null) throw new Error("Phải truyền ít nhất inSeconds hoặc outSeconds.");
   const { project, sequence, clip } = await getActiveSequenceAndSelection(function () {});
-  const log = function (m) {};
 
   await project.lockedAccess(() => {
     project.executeTransaction((compoundAction) => {
       if (inSeconds != null) {
-        const inTick = secondsToTick(inSeconds);
-        compoundAction.addAction(clip.createSetInPointAction(inTick));
+        compoundAction.addAction(clip.createSetStartAction(secondsToTick(inSeconds)));
       }
       if (outSeconds != null) {
-        const outTick = secondsToTick(outSeconds);
-        compoundAction.addAction(clip.createSetOutPointAction(outTick));
+        compoundAction.addAction(clip.createSetEndAction(secondsToTick(outSeconds)));
       }
     }, "Trim clip qua MCP");
   });
 
-  let newIn = null, newOut = null;
-  try { newIn = (await clip.getInPoint()).seconds; } catch {}
-  try { newOut = (await clip.getOutPoint()).seconds; } catch {}
-  return { trimmed: true, newInSeconds: newIn, newOutSeconds: newOut };
+  let newStart = null, newEnd = null;
+  try { newStart = (await clip.getStartTime()).seconds; } catch {}
+  try { newEnd = (await clip.getEndTime()).seconds; } catch {}
+  return { trimmed: true, newInSeconds: newStart, newOutSeconds: newEnd };
 }
 
+// LƯU Ý 2026-09-14: TrackItem.remove()/createRemoveAction() KHÔNG tồn tại (đã xác nhận qua probe
+// prototype trực tiếp). API đúng — tìm ra qua audit sample chính thức Adobe (sequenceEditor.ts) —
+// là SequenceEditor.createRemoveItemsAction(trackItemSelection, ripple, mediaType), 3 THAM SỐ, thiếu
+// tham số thứ 3 (MediaType constant) là lý do mọi lần thử trước đều "Not Enough Parameters"/"Illegal
+// Parameter type". trackItemSelection lấy qua _buildSelectionObject() (cùng helper dùng cho
+// select_all_clips/select_clips_in_range), KHÔNG phải mảng thô.
 async function deleteClip({ ripple = false }) {
   const { project, sequence, clip } = await getActiveSequenceAndSelection(function () {});
 
-  if (ripple) {
-    // Thử QE DOM trước
-    const qeSeq = await tryGetQeSequence();
-    if (qeSeq && typeof qeSeq.rippleDelete === "function") {
-      try {
-        const start = (await clip.getInPoint()).seconds;
-        const end = (await clip.getOutPoint()).seconds;
-        await qeSeq.rippleDelete(start, end);
-        return { deleted: 1, method: "QE_ripple" };
-      } catch {}
-    }
-    // Fallback: TrackItem.remove(inRipple=true, inAlignToVideo=false)
-    try {
-      await clip.remove(true, false);
-      return { deleted: 1, method: "remove_ripple" };
-    } catch (e) {
-      throw new Error(`Ripple delete thất bại: ${e.message}`);
-    }
-  }
+  const mediaType = (await clip.getMediaType()) === "Audio"
+    ? ppro.Constants.MediaType.AUDIO
+    : ppro.Constants.MediaType.VIDEO;
+  const sequenceEditor = ppro.SequenceEditor.getEditor(sequence);
+  const selectionObj = await _buildSelectionObject(sequence, [clip]);
 
-  // Xóa thường không ripple
-  try {
-    await project.lockedAccess(() => {
-      project.executeTransaction((compoundAction) => {
-        compoundAction.addAction(clip.createRemoveAction());
-      }, "Xóa clip qua MCP");
-    });
-    return { deleted: 1, method: "removeAction" };
-  } catch {
-    // Thử API remove() trực tiếp
-    try {
-      await clip.remove(false, false);
-      return { deleted: 1, method: "remove_direct" };
-    } catch (e2) {
-      throw new Error(`Xóa clip thất bại: ${e2.message}`);
-    }
-  }
+  await project.lockedAccess(() => {
+    project.executeTransaction((compoundAction) => {
+      compoundAction.addAction(sequenceEditor.createRemoveItemsAction(selectionObj, ripple, mediaType));
+    }, "Xóa clip qua MCP");
+  });
+
+  return { deleted: 1, method: "createRemoveItemsAction", ripple };
 }
 
 async function rippleDelete({ startSeconds, endSeconds }) {
@@ -1686,13 +1707,14 @@ async function rippleDelete({ startSeconds, endSeconds }) {
   const sequence = await project.getActiveSequence();
   if (!sequence) throw new Error("Không có sequence active.");
 
-  // Nếu không truyền start/end, lấy từ clip đang chọn
+  // Nếu không truyền start/end, lấy từ clip đang chọn (dùng getStartTime/getEndTime - vị trí
+  // timeline thật, KHÔNG phải getInPoint/getOutPoint - source trim, bug đã gặp nhiều lần trước đây).
   let start = startSeconds, end = endSeconds;
   if (start == null || end == null) {
     try {
       const { clip } = await getActiveSequenceAndSelection(function () {});
-      if (start == null) start = (await clip.getInPoint()).seconds;
-      if (end == null) end = (await clip.getOutPoint()).seconds;
+      if (start == null) start = (await clip.getStartTime()).seconds;
+      if (end == null) end = (await clip.getEndTime()).seconds;
     } catch (e) {
       throw new Error("Phải truyền startSeconds/endSeconds hoặc chọn clip trên timeline.");
     }
@@ -1712,7 +1734,9 @@ async function rippleDelete({ startSeconds, endSeconds }) {
     }
   }
 
-  // Fallback: tìm clip trong range và remove(ripple=true)
+  // Fallback: tìm clip trong range, xoá qua SequenceEditor.createRemoveItemsAction (cùng API đúng
+  // đã fix ở deleteClip - xem ghi chú 2026-09-14 phía trên). Video và audio cần 2 lần gọi riêng
+  // (mediaType là tham số bắt buộc, không có hằng số "cả 2"), xử lý video trước rồi audio.
   const startTick = secondsToTick(start);
   const endTick = secondsToTick(end);
   const items = await getTrackItemsInRange(sequence, startTick, endTick, "all");
@@ -1721,17 +1745,107 @@ async function rippleDelete({ startSeconds, endSeconds }) {
     return { removed: false, message: "Không tìm thấy clip nào trong khoảng này để ripple delete.", startSeconds: start, endSeconds: end };
   }
 
-  // Xử lý từ cuối về đầu để timestamp không lệch
-  items.sort((a, b) => b.itemStart.seconds - a.itemStart.seconds);
+  const sequenceEditor = ppro.SequenceEditor.getEditor(sequence);
   let deleted = 0;
-  for (const { item } of items) {
+  for (const mediaType of ["video", "audio"]) {
+    const group = items.filter((i) => i.trackType === mediaType);
+    if (group.length === 0) continue;
     try {
-      await item.remove(true, false);
-      deleted++;
+      const selectionObj = await _buildSelectionObject(sequence, group.map((i) => i.item));
+      const mt = mediaType === "audio" ? ppro.Constants.MediaType.AUDIO : ppro.Constants.MediaType.VIDEO;
+      await project.lockedAccess(() => {
+        project.executeTransaction((compoundAction) => {
+          compoundAction.addAction(sequenceEditor.createRemoveItemsAction(selectionObj, true, mt));
+        }, "Ripple delete qua MCP");
+      });
+      deleted += group.length;
     } catch {}
   }
 
-  return { removed: deleted > 0, deleted, gapSeconds: end - start, method: "fallback_remove_ripple" };
+  return { removed: deleted > 0, deleted, gapSeconds: end - start, method: "createRemoveItemsAction" };
+}
+
+// ============================================================================
+// GROUP — Roll/Slip edit (generic, dựng từ primitive đã verify) — 2026-09-14
+// roll_edit: dời điểm cắt chung giữa 2 clip liền kề — set end clip trái + start clip phải CÙNG 1
+// transaction (dùng createSetEndAction/createSetStartAction đã xác nhận đúng ở trim_clip).
+// slip_edit: dịch cả in/out điểm NGUỒN của 1 clip (createSetInPointAction/createSetOutPointAction)
+// nhưng GIỮ NGUYÊN vị trí+duration trên timeline — khác trim_clip (đổi cả 2).
+// ============================================================================
+
+async function rollEdit({ trackIndex, trackType = "video", editTimeSeconds, newTimeSeconds }, log) {
+  if (editTimeSeconds == null || newTimeSeconds == null) throw new Error("Phải truyền editTimeSeconds và newTimeSeconds.");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  const track = trackType === "audio" ? await sequence.getAudioTrack(trackIndex) : await sequence.getVideoTrack(trackIndex);
+  if (!track) throw new Error(`Không tìm thấy ${trackType} track index ${trackIndex}.`);
+
+  const items = await track.getTrackItems(ppro.Constants.TrackItemType.CLIP, false);
+  const editTick = secondsToTick(editTimeSeconds);
+  let leftClip = null, rightClip = null;
+  for (const item of items) {
+    const s = (await item.getStartTime()).seconds;
+    const e = (await item.getEndTime()).seconds;
+    if (Math.abs(e - editTimeSeconds) < 0.05) leftClip = item;
+    if (Math.abs(s - editTimeSeconds) < 0.05) rightClip = item;
+  }
+  if (!leftClip || !rightClip) {
+    throw new Error(`Không tìm thấy đúng 2 clip liền kề tại điểm cắt ${editTimeSeconds}s trên ${trackType} track ${trackIndex} (leftClip=${!!leftClip}, rightClip=${!!rightClip}).`);
+  }
+
+  const newTick = secondsToTick(newTimeSeconds);
+  await project.lockedAccess(() => {
+    project.executeTransaction((compoundAction) => {
+      compoundAction.addAction(leftClip.createSetEndAction(newTick));
+      compoundAction.addAction(rightClip.createSetStartAction(newTick));
+    }, "Roll edit qua MCP");
+  });
+
+  const actualLeftEnd = (await leftClip.getEndTime()).seconds;
+  const actualRightStart = (await rightClip.getStartTime()).seconds;
+  return { rolled: true, trackIndex, trackType, oldEditTimeSeconds: editTimeSeconds, newEditTimeSeconds: newTimeSeconds, actualLeftEnd, actualRightStart };
+}
+
+async function slipEdit({ offsetSeconds }, log) {
+  if (offsetSeconds == null) throw new Error("Phải truyền offsetSeconds.");
+  const { project, clip } = await getActiveSequenceAndSelection(log);
+
+  const inPoint = await clip.getInPoint();
+  const outPoint = await clip.getOutPoint();
+  const originalStartSeconds = (await clip.getStartTime()).seconds;
+  const newIn = secondsToTick(inPoint.seconds + offsetSeconds);
+  const newOut = secondsToTick(outPoint.seconds + offsetSeconds);
+
+  await project.lockedAccess(() => {
+    project.executeTransaction((compoundAction) => {
+      compoundAction.addAction(clip.createSetInPointAction(newIn));
+      compoundAction.addAction(clip.createSetOutPointAction(newOut));
+    }, "Slip edit qua MCP");
+  });
+
+  // BUG xác nhận 2026-09-14 (live-test cả ảnh tĩnh lẫn clip video thật): createSetInPointAction/
+  // createSetOutPointAction KHÔNG chỉ đổi source trim như kỳ vọng — chúng còn dịch luôn vị trí
+  // timeline (getStartTime/getEndTime) đúng bằng offsetSeconds, dù giữ nguyên duration. Bù lại bằng
+  // createMoveAction (offset-based, đã verify đúng nhiều lần ở insert_clip/move_clip) để giữ đúng vị
+  // trí/thời lượng timeline như mô tả tool (chỉ đổi nội dung source hiển thị).
+  const afterCompStartSeconds = (await clip.getStartTime()).seconds;
+  const driftSeconds = afterCompStartSeconds - originalStartSeconds;
+  if (Math.abs(driftSeconds) > 0.0001) {
+    const compensateTick = secondsToTick(-driftSeconds);
+    await project.lockedAccess(() => {
+      project.executeTransaction((compoundAction) => {
+        compoundAction.addAction(clip.createMoveAction(compensateTick));
+      }, "Slip edit: bù lại vị trí timeline bị dịch theo bug");
+    });
+  }
+
+  const actualIn = (await clip.getInPoint()).seconds;
+  const actualOut = (await clip.getOutPoint()).seconds;
+  const actualStartSeconds = (await clip.getStartTime()).seconds;
+  return { slipped: true, offsetSeconds, actualInPoint: actualIn, actualOutPoint: actualOut, actualStartSeconds, driftCompensatedSeconds: driftSeconds };
 }
 
 async function moveClip({ startSeconds, trackIndex }) {
@@ -1788,7 +1902,7 @@ async function detectSilenceRegions({ thresholdDb = -40, minDurationMs = 300 }, 
   // Đọc và decode audio
   let audioData;
   try {
-    const fileUrl = pathToFileUrl(mediaPath);
+    const fileUrl = pathToRawFileUrl(mediaPath);
     const entry = await uxpFs.getEntryWithUrl(fileUrl);
     const arrayBuf = await entry.read({ format: uxpFormats.binary });
     const uint8 = new Uint8Array(arrayBuf);
@@ -1938,17 +2052,35 @@ async function applyEffect({ matchName }, log) {
     );
   }
 
-  // VideoFilterFactory.createComponent(matchName) → component
+  // VideoFilterFactory.createComponent(matchName) → component. LƯU Ý (2026-09-14):
+  // `createVideoFilter` KHÔNG tồn tại trên VideoFilterFactory (chỉ `createComponent`) — nhánh thử nó
+  // trước luôn fail, giữ lại chỉ để tương thích nếu Adobe thêm sau này. Quan trọng hơn: lỗi từ
+  // `createComponent` khi matchName sai là 1 STRING ném thẳng ra (không phải Error object), nên
+  // `e2.message` luôn là `undefined` — code cũ hiển thị lỗi vô nghĩa "undefined" thay vì lý do thật.
+  // Một số effect (vd Lumetri Color) cần prefix "AE." trước matchName chuẩn ADBE khi tạo qua
+  // createComponent dù lúc ĐỌC LẠI qua getClipEffects các effect khác (vd Gaussian Blur) cũng tự
+  // thêm "AE." — nhưng lúc TẠO thì Gaussian Blur lại chấp nhận bare name còn Lumetri Color thì không.
+  // Thử thêm biến thể "AE." + matchName làm attempt 2 trước khi bỏ cuộc.
   let component;
-  try {
-    const factory = await ppro.VideoFilterFactory.createVideoFilter(matchName);
-    component = factory;
-  } catch {
+  const candidates = [matchName, matchName.startsWith("AE.") ? matchName.slice(3) : `AE.${matchName}`];
+  const errors = [];
+  for (const candidate of candidates) {
     try {
-      component = await ppro.VideoFilterFactory.createComponent(matchName);
-    } catch (e2) {
-      throw new Error(`Không tạo được component cho "${matchName}": ${e2.message}. Kiểm tra matchName có đúng không (dùng search_effects).`);
+      component = await ppro.VideoFilterFactory.createComponent(candidate);
+      if (component) break;
+    } catch (e) {
+      errors.push(`"${candidate}": ${e && e.message ? e.message : String(e)}`);
     }
+  }
+  if (!component) {
+    // [DEBUG SENTINEL 2026-09-14] tìm tên thật gần đúng trong danh sách matchName cài sẵn.
+    let realNames = [];
+    try {
+      const all = await ppro.VideoFilterFactory.getMatchNames();
+      const keyword = matchName.replace(/^AE\./, "").replace(/^ADBE /, "").split(" ")[0].toLowerCase();
+      realNames = all.filter(n => String(n).toLowerCase().includes(keyword));
+    } catch (e3) { realNames = [`lỗi getMatchNames: ${e3.message}`]; }
+    throw new Error(`Không tạo được component cho "${matchName}" (đã thử cả 2 biến thể tên): ${errors.join(" | ")}. Tên gần đúng trong danh sách thật: ${JSON.stringify(realNames)}`);
   }
 
   let componentIndex = -1;
@@ -2012,6 +2144,11 @@ async function setEffectParam({ matchName, paramName, value, timeSeconds }, log)
   let ok;
   await project.lockedAccess(() => {
     ok = project.executeTransaction((compoundAction) => {
+      // BẮT BUỘC bật time-varying trước khi add keyframe thật (timeSeconds != null) — nếu không,
+      // createAddKeyframeAction chỉ âm thầm ghi đè giá trị tĩnh, không tạo keyframe thật (phát hiện
+      // 2026-09-14 khi live-test get_keyframes/get_value_at_time trả về static thay vì nội suy).
+      // Pattern đã verify đúng từ code Beat Shake cũ (xem addShakeKeyframesForClip phía trên).
+      if (timeSeconds != null) compoundAction.addAction(param.createSetTimeVaryingAction(true));
       compoundAction.addAction(setStaticKeyframe(param, value, atTick));
     }, timeSeconds != null ? "Set giá trị keyframe" : "Set static value");
   });
@@ -2026,6 +2163,119 @@ async function setEffectParam({ matchName, paramName, value, timeSeconds }, log)
   }
 
   return { set: true, matchName, paramName, value, timeSeconds: timeSeconds ?? null, actualValueReadBack: actualValue };
+}
+
+// ============================================================================
+// GROUP — Keyframe (generic, cho MỌI effect param) — 2026-09-14
+// API đã verify chạy được thật từ trước (dùng trong code Beat Shake cũ ở file này):
+// createKeyframe/createAddKeyframeAction/getKeyframeListAsTickTimes/
+// createRemoveKeyframeRangeAction/createSetInterpolationAtKeyframeAction/getValueAtTime.
+// Quy ước tick: LUÔN clip.getInPoint().seconds + timeSeconds (source-time của param, giống
+// setEffectParam ở trên) — KHÔNG phải getStartTime() (đó là vị trí timeline).
+// add_keyframe = đã có sẵn qua set_effect_param(matchName, paramName, value, timeSeconds).
+// ============================================================================
+
+async function getKeyframes({ matchName, paramName }, log) {
+  const { clip } = await getActiveSequenceAndSelection(log);
+  const comp = await findComponentByMatchName(clip, matchName);
+  if (!comp) throw new Error(`Không tìm thấy effect "${matchName}" trên clip. Dùng get_clip_effects để xem.`);
+  const param = await findParamByName(comp, paramName);
+  if (!param) throw new Error(`Không tìm thấy param "${paramName}" trong effect "${matchName}".`);
+
+  const clipInPoint = await clip.getInPoint();
+  const ticks = await param.getKeyframeListAsTickTimes();
+  const keyframes = [];
+  for (const tick of ticks) {
+    let value = null;
+    try { value = unwrapParamValue(await param.getValueAtTime(tick)); } catch {}
+    keyframes.push({ timeSeconds: tick.seconds - clipInPoint.seconds, value });
+  }
+  return { matchName, paramName, count: keyframes.length, keyframes };
+}
+
+async function removeKeyframe({ matchName, paramName, timeSeconds }, log) {
+  if (timeSeconds == null) throw new Error("Phải truyền timeSeconds.");
+  const { project, clip } = await getActiveSequenceAndSelection(log);
+  const comp = await findComponentByMatchName(clip, matchName);
+  if (!comp) throw new Error(`Không tìm thấy effect "${matchName}" trên clip.`);
+  const param = await findParamByName(comp, paramName);
+  if (!param) throw new Error(`Không tìm thấy param "${paramName}" trong effect "${matchName}".`);
+
+  const clipInPoint = await clip.getInPoint();
+  const atTick = secondsToTick(timeSeconds + clipInPoint.seconds);
+
+  // createRemoveKeyframeRangeAction đòi start < stop nghiêm ngặt (lỗi native "start time should be
+  // less than stoptime" nếu truyền cùng 1 tick) — phát hiện 2026-09-14. Pad ±1ms quanh atTick (nhỏ
+  // hơn nhiều so với khoảng cách 1 frame thực tế ở mọi fps thường dùng) để chỉ trúng đúng 1 keyframe.
+  const rangeStart = secondsToTick(timeSeconds + clipInPoint.seconds - 0.001);
+  const rangeEnd = secondsToTick(timeSeconds + clipInPoint.seconds + 0.001);
+
+  const before = (await param.getKeyframeListAsTickTimes()).length;
+  await project.lockedAccess(() => {
+    project.executeTransaction((compoundAction) => {
+      compoundAction.addAction(param.createRemoveKeyframeRangeAction(rangeStart, rangeEnd, true));
+    }, `Xoá keyframe ${matchName}.${paramName}`);
+  });
+  const after = (await param.getKeyframeListAsTickTimes()).length;
+
+  return { removed: after < before, matchName, paramName, timeSeconds, countBefore: before, countAfter: after };
+}
+
+async function removeKeyframeRange({ matchName, paramName, startSeconds, endSeconds }, log) {
+  if (startSeconds == null || endSeconds == null) throw new Error("Phải truyền startSeconds và endSeconds.");
+  const { project, clip } = await getActiveSequenceAndSelection(log);
+  const comp = await findComponentByMatchName(clip, matchName);
+  if (!comp) throw new Error(`Không tìm thấy effect "${matchName}" trên clip.`);
+  const param = await findParamByName(comp, paramName);
+  if (!param) throw new Error(`Không tìm thấy param "${paramName}" trong effect "${matchName}".`);
+
+  const clipInPoint = await clip.getInPoint();
+  const startTick = secondsToTick(startSeconds + clipInPoint.seconds);
+  const endTick = secondsToTick(endSeconds + clipInPoint.seconds);
+
+  const before = (await param.getKeyframeListAsTickTimes()).length;
+  await project.lockedAccess(() => {
+    project.executeTransaction((compoundAction) => {
+      compoundAction.addAction(param.createRemoveKeyframeRangeAction(startTick, endTick, true));
+    }, `Xoá dải keyframe ${matchName}.${paramName}`);
+  });
+  const after = (await param.getKeyframeListAsTickTimes()).length;
+
+  return { removed: before - after, matchName, paramName, startSeconds, endSeconds, countBefore: before, countAfter: after };
+}
+
+async function getValueAtTime({ matchName, paramName, timeSeconds }, log) {
+  const { clip } = await getActiveSequenceAndSelection(log);
+  const comp = await findComponentByMatchName(clip, matchName);
+  if (!comp) throw new Error(`Không tìm thấy effect "${matchName}" trên clip.`);
+  const param = await findParamByName(comp, paramName);
+  if (!param) throw new Error(`Không tìm thấy param "${paramName}" trong effect "${matchName}".`);
+
+  const clipInPoint = await clip.getInPoint();
+  const atTick = timeSeconds != null ? secondsToTick(timeSeconds + clipInPoint.seconds) : clipInPoint;
+  const value = unwrapParamValue(await param.getValueAtTime(atTick));
+  return { matchName, paramName, timeSeconds: timeSeconds ?? 0, value };
+}
+
+async function setKeyframeInterpolation({ matchName, paramName, timeSeconds, mode = "bezier" }, log) {
+  if (timeSeconds == null) throw new Error("Phải truyền timeSeconds (thời điểm keyframe cần đổi).");
+  const { project, clip } = await getActiveSequenceAndSelection(log);
+  const comp = await findComponentByMatchName(clip, matchName);
+  if (!comp) throw new Error(`Không tìm thấy effect "${matchName}" trên clip.`);
+  const param = await findParamByName(comp, paramName);
+  if (!param) throw new Error(`Không tìm thấy param "${paramName}" trong effect "${matchName}".`);
+
+  const clipInPoint = await clip.getInPoint();
+  const atTick = secondsToTick(timeSeconds + clipInPoint.seconds);
+  const apiMode = mode === "hold" ? ppro.Constants.InterpolationMode.HOLD : ppro.Constants.InterpolationMode.BEZIER;
+
+  await project.lockedAccess(() => {
+    project.executeTransaction((compoundAction) => {
+      compoundAction.addAction(param.createSetInterpolationAtKeyframeAction(atTick, apiMode, true));
+    }, `Đổi interpolation ${matchName}.${paramName}`);
+  });
+
+  return { set: true, matchName, paramName, timeSeconds, mode };
 }
 
 async function removeEffect({ matchName }, log) {
@@ -2194,26 +2444,69 @@ async function setClipPan({ panValue }, log) {
   let comp = await findComponentByMatchName(clip, "ADBE Panner");
   if (!comp) comp = await findComponentByName(clip, "Panner");
   if (!comp) comp = await findComponentByName(clip, "Balance");
-  if (!comp) throw new Error("Không tìm thấy component Panner/Balance trên clip audio.");
+  if (!comp) {
+    // Clip audio KHÔNG mặc định có Panner/Balance intrinsic (khác Volume — phát hiện 2026-09-14: clip
+    // stereo chỉ có sẵn "Internal Volume Stereo"/"Internal Channel Volume Stereo", không có Balance).
+    // Phải tự thêm effect "Balance" — nhưng AudioFilterFactory không có createComponent(matchName) như
+    // VideoFilterFactory, phải qua createComponentByDisplayName(displayName) (đã ghi chú sẵn ở
+    // getInstalledEffectsViaFactory phía trên; chữ ký đúng xác nhận 2026-09-14: chỉ nhận 1 tham số
+    // string displayName, không cần truyền clip).
+    const af = ppro.AudioFilterFactory;
+    if (af && typeof af.createComponentByDisplayName === "function") {
+      const newComp = await af.createComponentByDisplayName("Balance");
+      if (newComp) {
+        const chain = await clip.getComponentChain();
+        await project.lockedAccess(() => {
+          project.executeTransaction((ca) => {
+            ca.addAction(chain.createAppendComponentAction(newComp));
+          }, "Thêm Balance vào clip audio");
+        });
+        comp = await findComponentByName(clip, "Balance");
+      }
+    }
+  }
+  if (!comp) throw new Error("Không tìm thấy/thêm được component Panner/Balance trên clip audio.");
 
   const param = await findParamByName(comp, "Balance") || await findParamByName(comp, "Pan");
   if (!param) throw new Error("Không tìm thấy param pan/balance.");
 
+  // QUAN TRỌNG (phát hiện 2026-09-14, live-test): param "Balance" thật của Premiere dùng thang
+  // -1.0 (trái hết) .. +1.0 (phải hết), KHÔNG PHẢI -100..100 như input của tool này. Set thẳng giá
+  // trị -50 (ngoài range) khiến Premiere ÂM THẦM bỏ qua write — không throw lỗi, executeTransaction
+  // vẫn trả true, nhưng đọc lại vẫn là giá trị mặc định cũ (0). Phải quy đổi /100 trước khi ghi,
+  // *100 lúc đọc lại để trả đúng đơn vị -100..100 cho người gọi tool.
+  // ⚠️ CHƯA GIẢI QUYẾT ĐƯỢC (2026-09-14, đã điều tra sâu — xem TODO.md): set giá trị lên param
+  // "Balance" của component "Balance" (thêm mới qua AudioFilterFactory.createComponentByDisplayName)
+  // KHÔNG có tác dụng — đã thử 4 biến thể (giá trị -50/-0.5, tại clip.getInPoint()/tick 0, có/không
+  // bật time-varying) và TẤT CẢ đều đọc lại ra 0 dù `getKeyframeListAsTickTimes()` xác nhận có 1
+  // keyframe được tạo (chỉ là keyframe đó tự mang giá trị 0, không phải giá trị đã gửi). Nghi ngờ
+  // component audio filter mới thêm qua đường này không nhận write bằng pattern
+  // createKeyframe/createAddKeyframeAction giống component video — cần điều tra thêm (có thể phải
+  // dùng API khác dành riêng cho audio param, hoặc component cần "khởi tạo" theo cách khác trước khi
+  // ghi được). Tạm thời set_clip_pan KHÔNG dùng được — báo lỗi rõ thay vì báo thành công giả.
   const atTick = await clip.getInPoint();
-  let ok;
   await project.lockedAccess(() => {
-    ok = project.executeTransaction((compoundAction) => {
-      compoundAction.addAction(setStaticKeyframe(param, panValue, atTick));
+    project.executeTransaction((compoundAction) => {
+      compoundAction.addAction(param.createSetTimeVaryingAction(true));
+      compoundAction.addAction(setStaticKeyframe(param, panValue / 100, atTick));
     }, "Set clip pan");
   });
-  if (!ok) throw new Error("executeTransaction trả về false khi set clip pan.");
 
-  let actualPanValue = null;
-  try { actualPanValue = unwrapParamValue(await param.getValueAtTime(atTick)); } catch {}
+  const actualRaw = unwrapParamValue(await param.getValueAtTime(atTick));
+  const actualPanValue = actualRaw != null ? actualRaw * 100 : null;
+  if (Math.abs((actualPanValue ?? 0) - panValue) > 1) {
+    throw new Error(
+      `set_clip_pan hiện KHÔNG hoạt động: gửi panValue=${panValue} nhưng đọc lại param "Balance" vẫn là ${actualPanValue} ` +
+      `(component audio filter mới thêm qua AudioFilterFactory không nhận write theo pattern keyframe thông thường — cần điều tra thêm, xem TODO.md).`
+    );
+  }
 
   return { applied: true, panValue, actualValueReadBack: actualPanValue };
 }
 
+// LƯU Ý 2026-09-14: probe trực tiếp prototype Track xác nhận KHÔNG có createSetMuteAction (code cũ
+// đoán sai, chưa từng live-test) — API thật là track.setMute(muted), gọi trực tiếp KHÔNG qua
+// executeTransaction (giống setSelection/clearSelection, không phải action-creator).
 async function muteTrack({ trackIndex, muted }) {
   const project = await ppro.Project.getActiveProject();
   if (!project) throw new Error("Không tìm thấy project đang mở.");
@@ -2223,22 +2516,79 @@ async function muteTrack({ trackIndex, muted }) {
   const track = await sequence.getAudioTrack(trackIndex);
   if (!track) throw new Error(`Không tìm thấy audio track index ${trackIndex}.`);
 
-  try {
-    await project.lockedAccess(() => {
-      project.executeTransaction((compoundAction) => {
-        compoundAction.addAction(track.createSetMuteAction(muted));
-      }, `${muted ? "Mute" : "Unmute"} track ${trackIndex}`);
-    });
-    return { trackIndex, muted };
-  } catch (e) {
-    // Thử API trực tiếp
-    try {
-      await track.setMuted(muted);
-      return { trackIndex, muted };
-    } catch (e2) {
-      throw new Error(`Không mute được track ${trackIndex}: ${e2.message}`);
-    }
+  await track.setMute(muted);
+  const actualMuted = await track.isMuted();
+  return { trackIndex, muted, actualMuted };
+}
+
+// ============================================================================
+// GROUP — Track info / rename (generic) — 2026-09-14
+// LƯU Ý QUAN TRỌNG: probe trực tiếp prototype Sequence + Track + SequenceEditor xác nhận KHÔNG có
+// bất kỳ API nào để add/delete/lock/toggle-visibility/set-target track qua UXP (Sequence chỉ có
+// getVideoTrackCount/getAudioTrackCount/getVideoTrack/getAudioTrack/getCaptionTrack — thuần đọc).
+// Chỉ khả thi: đọc thông tin track (getIndex/isMuted/name/getMediaType/getTrackItems) và đổi tên
+// (createSetNameAction). add_track/delete_track/lock_track/toggle_track_visibility/set_target_track
+// KHÔNG THỂ làm qua UXP hiện tại — xác nhận là giới hạn thật, không phải chưa tìm ra.
+// ============================================================================
+
+async function getTrackInfo({ trackIndex, trackType = "video" }) {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  const track = trackType === "audio" ? await sequence.getAudioTrack(trackIndex) : await sequence.getVideoTrack(trackIndex);
+  if (!track) throw new Error(`Không tìm thấy ${trackType} track index ${trackIndex}.`);
+
+  const items = await track.getTrackItems(ppro.Constants.TrackItemType.CLIP, false);
+  return {
+    trackIndex,
+    trackType,
+    name: track.name || null,
+    muted: await track.isMuted(),
+    clipCount: items.length
+  };
+}
+
+async function listSequenceTracks() {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  const videoCount = await sequence.getVideoTrackCount();
+  const audioCount = await sequence.getAudioTrackCount();
+  const tracks = [];
+  for (let i = 0; i < videoCount; i++) {
+    const t = await sequence.getVideoTrack(i);
+    const items = await t.getTrackItems(ppro.Constants.TrackItemType.CLIP, false);
+    tracks.push({ trackIndex: i, trackType: "video", name: t.name || null, muted: await t.isMuted(), clipCount: items.length });
   }
+  for (let i = 0; i < audioCount; i++) {
+    const t = await sequence.getAudioTrack(i);
+    const items = await t.getTrackItems(ppro.Constants.TrackItemType.CLIP, false);
+    tracks.push({ trackIndex: i, trackType: "audio", name: t.name || null, muted: await t.isMuted(), clipCount: items.length });
+  }
+  return { videoTrackCount: videoCount, audioTrackCount: audioCount, tracks };
+}
+
+async function renameTrack({ trackIndex, trackType = "video", newName }) {
+  if (!newName) throw new Error("Phải truyền newName.");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  const track = trackType === "audio" ? await sequence.getAudioTrack(trackIndex) : await sequence.getVideoTrack(trackIndex);
+  if (!track) throw new Error(`Không tìm thấy ${trackType} track index ${trackIndex}.`);
+
+  await project.lockedAccess(() => {
+    project.executeTransaction((compoundAction) => {
+      compoundAction.addAction(track.createSetNameAction(newName));
+    }, `Đổi tên track → "${newName}"`);
+  });
+
+  return { trackIndex, trackType, newName, actualName: track.name || null };
 }
 
 async function setupAudioDucking({ musicTrackIndex, voiceTrackIndex, duckDb = -12 }, log) {
@@ -2376,11 +2726,13 @@ async function batchAddTransitions({ position, matchName = "ADBE Cross Dissolve"
 async function applyLumetriPreset({ presetName, inputCubePath }, log) {
   const { project, clip } = await getActiveSequenceAndSelection(log);
 
-  // Thêm Lumetri Color effect nếu chưa có
-  let lumetriComp = await findComponentByMatchName(clip, "ADBE Lumetri Color");
+  // Thêm Lumetri Color effect nếu chưa có. matchName THẬT xác nhận qua probe 2026-09-14:
+  // "AE.ADBE Lumetri" — KHÔNG PHẢI "ADBE Lumetri Color" như database cũ ghi sai (tên đó không tồn
+  // tại trong VideoFilterFactory.getMatchNames() thật, gây lỗi "No video filter found").
+  let lumetriComp = await findComponentByMatchName(clip, "AE.ADBE Lumetri");
   if (!lumetriComp) {
-    await applyEffect({ matchName: "ADBE Lumetri Color" }, log);
-    lumetriComp = await findComponentByMatchName(clip, "ADBE Lumetri Color");
+    await applyEffect({ matchName: "AE.ADBE Lumetri" }, log);
+    lumetriComp = await findComponentByMatchName(clip, "AE.ADBE Lumetri");
   }
   if (!lumetriComp) throw new Error("Không thêm được Lumetri Color vào clip.");
 
@@ -2389,14 +2741,14 @@ async function applyLumetriPreset({ presetName, inputCubePath }, log) {
     return {
       applied: false,
       message: `Đã thêm Lumetri Color vào clip. Để load file .cube "${inputCubePath}", mở Effect Controls → Lumetri Color → Creative → Look → Browse. UXP chưa có API set LUT file path trực tiếp.`,
-      matchName: "ADBE Lumetri Color"
+      matchName: "AE.ADBE Lumetri"
     };
   }
 
   return {
     applied: true,
     message: `Đã thêm Lumetri Color vào clip. Mở Effect Controls → Lumetri Color để chỉnh preset${presetName ? ` "${presetName}"` : ""} thủ công.`,
-    matchName: "ADBE Lumetri Color",
+    matchName: "AE.ADBE Lumetri",
     note: "UXP chưa có API set Lumetri preset tên trực tiếp."
   };
 }
@@ -2410,30 +2762,28 @@ async function setClipColorLabel({ color }, log) {
   };
   const colorIndex = colorMap[color] ?? 0;
 
-  try {
-    const projectItem = await clip.getProjectItem();
-    if (typeof projectItem.setColorLabel === "function") {
-      await project.lockedAccess(() => {
-        project.executeTransaction((compoundAction) => {
-          compoundAction.addAction(projectItem.createSetColorLabelAction(colorIndex));
-        }, "Set color label");
-      });
-    } else {
-      await projectItem.setColorLabel(colorIndex);
-    }
-    return { applied: true, color, colorIndex };
-  } catch (e) {
-    throw new Error(`Không set được color label: ${e.message}`);
-  }
+  const projectItem = await clip.getProjectItem();
+  // API đúng xác nhận qua probe trực tiếp prototype (2026-09-14): CHỈ có `createSetColorLabelAction`
+  // (action-based, qua executeTransaction) + `getColorLabelIndex()` để đọc. KHÔNG có `setColorLabel`
+  // trực tiếp nào (code cũ giả định sai + logic if/else bị đảo ngược, luôn rơi vào nhánh gọi
+  // `projectItem.setColorLabel()` không tồn tại).
+  await project.lockedAccess(() => {
+    project.executeTransaction((compoundAction) => {
+      compoundAction.addAction(projectItem.createSetColorLabelAction(colorIndex));
+    }, "Set color label");
+  });
+
+  const actualColorIndex = await projectItem.getColorLabelIndex();
+  return { applied: true, color, colorIndex, actualColorIndex };
 }
 
 async function adjustColorValues({ exposure, contrast, saturation, temperature }, log) {
   const { project, clip } = await getActiveSequenceAndSelection(log);
 
-  let lumetriComp = await findComponentByMatchName(clip, "ADBE Lumetri Color");
+  let lumetriComp = await findComponentByMatchName(clip, "AE.ADBE Lumetri");
   if (!lumetriComp) {
-    await applyEffect({ matchName: "ADBE Lumetri Color" }, log);
-    lumetriComp = await findComponentByMatchName(clip, "ADBE Lumetri Color");
+    await applyEffect({ matchName: "AE.ADBE Lumetri" }, log);
+    lumetriComp = await findComponentByMatchName(clip, "AE.ADBE Lumetri");
   }
   if (!lumetriComp) throw new Error("Không thêm được Lumetri Color.");
 
@@ -2670,23 +3020,17 @@ async function moveItemToBin({ clipName, targetBin }) {
   if (!sourceItem) throw new Error(`Không tìm thấy item "${clipName}" trong Project panel.`);
   if (!targetBinItem) throw new Error(`Không tìm thấy bin "${targetBin}" trong Project panel.`);
 
-  // LƯU Ý 2026-09-10: createMoveItemAction CÓ THẬT trên FolderItem.prototype (đã xác nhận live) —
-  // lỗi trước là do targetBinItem lấy từ rootItem.getItems() là ProjectItem chung, chưa cast sang
-  // FolderItem nên không thấy method (cùng bug pattern đã fix ở createBin).
-  const targetFolder = (typeof targetBinItem.createMoveItemAction === "function")
-    ? targetBinItem
-    : ppro.FolderItem.cast(targetBinItem);
-  if (!targetFolder || typeof targetFolder.createMoveItemAction !== "function") {
-    throw new Error(`Không cast được "${targetBin}" thành FolderItem hợp lệ (createMoveItemAction không tồn tại).`);
-  }
+  // LƯU Ý 2026-09-14: FIX qua audit sample chính thức Adobe (projectPanel.ts) — createMoveItemAction
+  // nhận 2 THAM SỐ (item cần di chuyển, folder đích đã cast), không phải 1 như code cũ tưởng — đó là
+  // lý do "Not Enough Parameters" trước đây đúng nghĩa đen. Gọi trên rootItem (chứa cả nguồn lẫn
+  // đích), không phải trên targetBinItem.
+  const targetFolder = ppro.FolderItem.cast(targetBinItem);
+  if (!targetFolder) throw new Error(`Không cast được "${targetBin}" thành FolderItem hợp lệ.`);
 
-  // LƯU Ý 2026-09-10: createMoveItemAction tồn tại thật trên FolderItem.prototype nhưng gọi với
-  // (item) hay ([item], bool) đều báo "Not Enough Parameters" từ native layer — chưa tìm ra chữ ký
-  // đúng (length báo 0, không đáng tin với hàm native). CHƯA GIẢI QUYẾT — xem TODO.md.
   let ok;
   await project.lockedAccess(() => {
     ok = project.executeTransaction((compoundAction) => {
-      compoundAction.addAction(targetFolder.createMoveItemAction(sourceItem));
+      compoundAction.addAction(rootItem.createMoveItemAction(sourceItem, targetFolder));
     }, `Move "${clipName}" → "${targetBin}" qua MCP`);
   });
   if (!ok) throw new Error("executeTransaction trả về false khi di chuyển item.");
@@ -2739,6 +3083,19 @@ async function relinkOfflineMedia({ searchFolder }) {
 // GROUP 11 — Selection
 // ============================================================================
 
+// LƯU Ý 2026-09-14: sequence.setSelection() KHÔNG nhận mảng TrackItem thô — ném "Illegal Parameter
+// type" dù không throw ở dạng lỗi rõ ràng (dễ nhầm là do timeline rỗng). API đúng đã xác nhận qua
+// live-test: lấy object TrackItemSelection hiện tại qua sequence.getSelection() (trả về object rỗng
+// hợp lệ kể cả khi chưa chọn gì), gọi .addItem(item) cho từng track item, rồi mới
+// sequence.setSelection(selectionObj) với chính object đó — không phải với mảng.
+async function _buildSelectionObject(sequence, items) {
+  const selectionObj = await sequence.getSelection();
+  for (const item of items) {
+    await selectionObj.addItem(item);
+  }
+  return selectionObj;
+}
+
 async function selectClipsInRange({ startSeconds, endSeconds, trackType = "all" }) {
   const project = await ppro.Project.getActiveProject();
   if (!project) throw new Error("Không tìm thấy project đang mở.");
@@ -2751,14 +3108,10 @@ async function selectClipsInRange({ startSeconds, endSeconds, trackType = "all" 
 
   if (items.length === 0) return { selected: 0, clips: [] };
 
-  // LƯU Ý 2026-09-10: sequence.createSelectItemsAction KHÔNG tồn tại trong bản Premiere này (đã
-  // live-test — không có trong prototype thật của Sequence, xem seqProto trong get_sequence_info).
-  // API đúng: sequence.setSelection(trackItems) — gọi trực tiếp, KHÔNG qua executeTransaction (đây
-  // không phải action creator). Trước đây lỗi bị nuốt trong try/catch rỗng nên tool báo "selected:N"
-  // dù thực chất không chọn được gì trên UI (get_selected_clips vẫn báo rỗng).
   let selectError = null;
   try {
-    await sequence.setSelection(items.map(i => i.item));
+    const selectionObj = await _buildSelectionObject(sequence, items.map(i => i.item));
+    await sequence.setSelection(selectionObj);
   } catch (e) {
     selectError = String(e && e.message || e);
   }
@@ -2782,7 +3135,8 @@ async function selectAllClips({ trackType = "all" }) {
 
   let selectError = null;
   try {
-    await sequence.setSelection(items.map(i => i.item));
+    const selectionObj = await _buildSelectionObject(sequence, items.map(i => i.item));
+    await sequence.setSelection(selectionObj);
   } catch (e) {
     selectError = String(e && e.message || e);
   }
@@ -2797,15 +3151,9 @@ async function deselectAllClips() {
   if (!sequence) throw new Error("Không có sequence active.");
 
   try {
-    await project.lockedAccess(() => {
-      project.executeTransaction((compoundAction) => {
-        compoundAction.addAction(sequence.createSelectItemsAction([], false));
-      }, "Bỏ chọn tất cả");
-    });
+    await sequence.clearSelection();
   } catch (e) {
-    try {
-      await sequence.clearSelection();
-    } catch {}
+    throw new Error(`clearSelection() thất bại: ${e.message}`);
   }
 
   return { done: true };
@@ -2856,24 +3204,35 @@ async function detectSceneEdits({ sensitivity = 50, createMarkers = true }, log)
 // GROUP 13 — Metadata
 // ============================================================================
 
+// LƯU Ý 2026-09-14: FIX qua audit sample chính thức Adobe (metadata.ts) — XMP metadata KHÔNG nằm
+// trên ProjectItem (không có getXMPMetadata/setXMPMetadata ở đó, đúng như đã xác nhận trước đây),
+// mà nằm trên namespace tĩnh riêng ppro.Metadata: getXMPMetadata(projectItem)/
+// createSetXMPMetadataAction(projectItem, xmpString).
 async function getClipMetadata({ fields }) {
   const { clip } = await getActiveSequenceAndSelection(function () {});
 
   try {
     const projectItem = await clip.getProjectItem();
-    if (typeof projectItem.getXMPMetadata !== "function") {
-      let proto = [];
-      try { proto = Object.getOwnPropertyNames(Object.getPrototypeOf(projectItem)); } catch {}
-      throw new Error(`projectItem.getXMPMetadata không tồn tại trong bản Premiere này. API thật có trên ProjectItem: [${proto.join(", ")}]`);
+    if (!ppro.Metadata || typeof ppro.Metadata.getXMPMetadata !== "function") {
+      throw new Error("ppro.Metadata.getXMPMetadata không tồn tại trong bản Premiere này.");
     }
-    const xmpString = await projectItem.getXMPMetadata();
+    const xmpString = await ppro.Metadata.getXMPMetadata(projectItem);
     // Parse XMP đơn giản — lấy các field phổ biến
     const metadata = {};
     const fieldNames = fields || ["description", "scene", "shot", "director", "camera", "comment", "keyword", "label"];
     for (const field of fieldNames) {
-      const regex = new RegExp(`<[^>]*:?${field}[^>]*>([^<]*)<`, "i");
-      const match = xmpString && xmpString.match(regex);
-      if (match) metadata[field] = match[1].trim();
+      if (!xmpString) continue;
+      // Field dạng Language Alternative chuẩn XMP (vd dc:description) lồng <rdf:Alt><rdf:li>giá
+      // trị</rdf:li></rdf:Alt> bên trong, không phải text phẳng — thử cấu trúc lồng trước.
+      const altRegex = new RegExp(`<[^>]*:?${field}[^>]*>[\\s\\S]*?<rdf:li[^>]*>([^<]*)<\\/rdf:li>[\\s\\S]*?<\\/[^>]*:?${field}>`, "i");
+      const altMatch = xmpString.match(altRegex);
+      if (altMatch) {
+        metadata[field] = altMatch[1].trim();
+        continue;
+      }
+      const flatRegex = new RegExp(`<[^>]*:?${field}[^>]*>([^<]*)<`, "i");
+      const flatMatch = xmpString.match(flatRegex);
+      if (flatMatch) metadata[field] = flatMatch[1].trim();
     }
     return { metadata, raw: fields ? undefined : xmpString };
   } catch (e) {
@@ -2887,24 +3246,43 @@ async function setClipMetadata({ metadata }, log) {
 
   try {
     const projectItem = await clip.getProjectItem();
-    let xmp = await projectItem.getXMPMetadata() || "";
+    if (!ppro.Metadata || typeof ppro.Metadata.createSetXMPMetadataAction !== "function") {
+      throw new Error("ppro.Metadata.createSetXMPMetadataAction không tồn tại trong bản Premiere này.");
+    }
+    let xmp = (await ppro.Metadata.getXMPMetadata(projectItem)) || "";
 
-    // Ghi từng field vào XMP
+    // Ghi từng field vào XMP. LƯU Ý 2026-09-14: rdf:Description có sẵn trong XMP mặc định của
+    // Premiere KHÔNG khai báo namespace "dc" (chỉ có xmpMM/stEvt/xmp) — chèn thẳng <dc:field> vào
+    // đó bị Premiere âm thầm bỏ qua khi lưu (API set không báo lỗi nhưng field không thật sự lưu,
+    // xác nhận qua get lại). Fix: tạo 1 rdf:Description RIÊNG có khai báo xmlns:dc, chèn trước
+    // </rdf:RDF> thay vì chèn vào node cũ thiếu namespace.
     const set = [];
+    const newFieldTags = [];
     for (const [field, value] of Object.entries(metadata)) {
-      // Simple XMP field injection — đây là approach đơn giản nhất
       const tagOpen = `<dc:${field}>`;
       const tagClose = `</dc:${field}>`;
       if (xmp.includes(tagOpen)) {
         xmp = xmp.replace(new RegExp(`${tagOpen}[^<]*${tagClose}`), `${tagOpen}${value}${tagClose}`);
       } else {
-        // Append vào cuối Description node nếu có
-        xmp = xmp.replace("</rdf:Description>", `${tagOpen}${value}${tagClose}</rdf:Description>`);
+        newFieldTags.push(`${tagOpen}${value}${tagClose}`);
       }
       set.push(field);
     }
+    if (newFieldTags.length > 0) {
+      const newDescriptionBlock =
+        `<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">` +
+        newFieldTags.join("") +
+        `</rdf:Description>`;
+      xmp = xmp.includes("</rdf:RDF>")
+        ? xmp.replace("</rdf:RDF>", `${newDescriptionBlock}</rdf:RDF>`)
+        : `<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">${newDescriptionBlock}</rdf:RDF></x:xmpmeta><?xpacket end="w"?>`;
+    }
 
-    await projectItem.setXMPMetadata(xmp);
+    await project.lockedAccess(() => {
+      project.executeTransaction((compoundAction) => {
+        compoundAction.addAction(ppro.Metadata.createSetXMPMetadataAction(projectItem, xmp));
+      }, "Set XMP metadata qua MCP");
+    });
     return { set: set.length, fields: set };
   } catch (e) {
     throw new Error(`Không ghi được XMP metadata: ${e.message}`);
@@ -3072,14 +3450,8 @@ function parseSrt(content) {
   return cues;
 }
 
-// LƯU Ý 2026-09-10: pathToFileUrl() percent-encode sẵn (vd " " → "%20") — nhưng
-// uxpFs.getEntryWithUrl() tự encode thêm 1 lần nữa, ra URL hỏng dạng "%2520" (đã xác nhận lỗi thật
-// khi đọc file có dấu cách trong path). Với hàm này dùng URL RAW (spaces thật, không encode) —
-// khác pattern pathToFileUrl() đang dùng ở detectSilenceRegions (chưa test, có thể cùng bug, chưa
-// sửa vì chưa xác nhận qua live-test — xem TODO.md).
 async function readTextFile(path) {
-  const rawUrl = "file:///" + path.replace(/\\/g, "/");
-  const entry = await uxpFs.getEntryWithUrl(rawUrl);
+  const entry = await uxpFs.getEntryWithUrl(pathToRawFileUrl(path));
   return await entry.read({ format: uxpFormats.utf8 });
 }
 
@@ -3612,7 +3984,10 @@ async function duplicateClip({ offsetSeconds = 1, videoTrackOffset = 0, audioTra
     throw new Error("createCloneTrackItemAction không khả dụng trong bản Premiere này.");
   }
 
-  const originalStart = (await clip.getInPoint()).seconds;
+  // LƯU Ý 2026-09-14: getInPoint() là SOURCE trim (thường mặc định ~3600s cho clip ảo/still image
+  // theo quy ước nội bộ Premiere) — không phải vị trí timeline. Dùng getStartTime() mới đúng, cùng
+  // lớp bug đã fix ở insert_clip/trim_clip.
+  const originalStart = (await clip.getStartTime()).seconds;
   const countBefore = await countAllTrackItems(sequence);
   // timeOffset là ĐỘ LỆCH thời gian so với clip gốc (không phải absolute time), theo đúng cách
   // sample chính thức của Adobe gọi hàm này ("shift it 1s leftward").
@@ -3640,7 +4015,7 @@ async function duplicateClip({ offsetSeconds = 1, videoTrackOffset = 0, audioTra
     videoTrackOffset,
     audioTrackOffset,
     expectedNewStartSeconds: originalStart + offsetSeconds,
-    note: "expectedNewStartSeconds là ước tính theo offsetSeconds truyền vào — chưa xác định lại chính xác track item mới bằng identity, chỉ verify qua tổng số track item tăng lên."
+    note: "expectedNewStartSeconds là ước tính theo offsetSeconds truyền vào — chưa xác định lại chính xác track item mới bằng identity, chỉ verify qua tổng số track item tăng lên. CẢNH BÁO: nếu offsetSeconds < duration của clip gốc (bản sao đè lên chính clip gốc), createCloneTrackItemAction sẽ CẮT/CHIA clip gốc thành nhiều mảnh thay vì giữ nguyên + thêm bản sao độc lập — dùng offsetSeconds >= duration clip gốc, hoặc đổi videoTrackOffset sang track khác, để tránh làm hỏng clip gốc ngoài ý muốn."
   };
 }
 
