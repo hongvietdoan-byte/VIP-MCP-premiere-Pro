@@ -2,7 +2,34 @@
 
 Cập nhật lần cuối: 2026-09-14. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
-## 🔨 Batch tool mới đợt 2 từ AUDIT_MASTER_TOOL_LIST.md — ĐÃ CODE, CHỜ RESTART CLAUDE ĐỂ LIVE-TEST (2026-09-14)
+## ✅ Batch tool mới đợt 2 — ĐÃ LIVE-TEST ĐẦY ĐỦ 9/9, 2 BUG FIX MỚI (2026-09-14)
+
+Live-test sau khi user restart app Claude, trên sequence test riêng (`MCP Transform Test`/`MCP RemoveSel Test`, đã xoá sau khi xong) với clip video thật.
+
+**9/9 tool hoạt động đúng sau khi fix 2 bug:**
+- `set_clip_scale`, `set_clip_rotation`, `set_clip_opacity` — đúng ngay từ đầu, verify read-back khớp.
+- `set_clip_position`, `set_clip_anchor_point`, `get_clip_transform` — đúng SAU KHI fix bug 1.
+- `remove_selected_clips`, `extract_selection`, `lift_selection` — đúng SAU KHI fix bug 2, verify kỹ: xoá đúng clip trong phạm vi, KHÔNG đụng clip ngoài phạm vi, `extract_selection` (ripple:true) xác nhận đóng khoảng trống đúng (clip sau dịch về đúng vị trí), `lift_selection` (ripple:false) xác nhận giữ nguyên khoảng trống.
+
+### 🐛 Bug 1 (ĐÃ FIX) — Position/Anchor Point đọc ra `null` + đơn vị sai (tưởng pixel, thật ra chuẩn hoá 0-1)
+
+`get_clip_transform` lần đầu trả `position: null, anchorPoint: null`. Nguyên nhân: comment cũ (kế thừa từ code Beat Shake, chưa từng verify riêng cho component Motion builtin) giả định Position/Anchor Point của Motion dùng object `{x,y}` pixel tuyệt đối — nhưng thực tế đọc ra `{value: [x,y]}`, tức MẢNG CHUẨN HOÁ 0-1 (giống hệt effect Transform tự thêm, không phải dạng riêng của Motion như tưởng). 2 lỗi chồng nhau: (1) thiếu `unwrapParamValue()` trước khi đưa vào `parsePositionValue()` nên không nhận diện được `{value:[...]}`; (2) `set_clip_position(x:960,y:540)` (tưởng pixel) ghi thẳng 960/540 vào trường chuẩn hoá 0-1 → đọc lại ra `[960,540]` — giá trị vô lý, đẩy clip ra ngoài xa khung hình.
+
+**Đã fix**: `setClipPosition`/`setClipAnchorPoint`/`getClipTransform` giờ quy đổi pixel↔chuẩn hoá qua `getFrameDimensions()` (chia/nhân theo width/height sequence thật) trước khi ghi/sau khi đọc — API tool vẫn nhận/trả pixel (dễ dùng), nội bộ tự quy đổi đúng đơn vị Premiere thật cần.
+
+**Live-tested**: `set_clip_position(960,540)` (giữa khung 1920x1080) → đọc lại đúng `{x:960,y:540}`; test lệch tâm `(1440,270)` → đọc lại khớp chính xác; `get_clip_transform` sau khi set cả 5 giá trị (position, anchorPoint, scale 150, rotation 45, opacity 50) → đọc lại đúng tất cả, đồng bộ đơn vị pixel giữa các tool.
+
+### 🐛 Bug 2 (ĐÃ FIX) — `getMediaType()` không trả về string, so sánh `=== "Audio"` luôn sai
+
+Live-test `remove_selected_clips` lần đầu (chọn 2 clip trong khoảng 15-40s) báo `deleted:3` — xoá NHẦM cả 1 clip ngoài phạm vi đã chọn. Điều tra bằng debug sentinel phát hiện: `item.getMediaType()` trả về 1 OBJECT enum thật (dạng GUID nội bộ), KHÔNG PHẢI string `"Audio"`/`"Video"` như code cũ giả định (dùng ở cả `deleteClip` lẫn `removeSelectedClips` mới viết) — so sánh `mt === "Audio"` luôn `false`, khiến MỌI item (kể cả clip audio) đều bị xếp nhầm vào nhóm "video" khi gom theo mediaType để xoá theo lô.
+
+So sánh ĐÚNG xác nhận qua debug: `mt === ppro.Constants.MediaType.AUDIO` / `=== ppro.Constants.MediaType.VIDEO` — identity so với hằng số SDK, không phải string.
+
+**Đã fix**: `removeSelectedClips` và `deleteClip` (cả 2 dùng chung pattern cũ) đổi sang so sánh đúng bằng hằng số. **Lưu ý phụ**: lần đầu nghi ngờ do "selection không được thay thế đúng" (chọn 2 nhưng xoá 3) — sau khi điều tra kỹ bằng test sạch (deselect hẳn → chọn đúng 1 clip → verify qua `get_selected_clips` độc lập → xoá) xác nhận nguyên nhân THẬT là bug mediaType ở trên, không phải bug selection. Có thể lần đầu bị nhiễu bởi state chọn tồn đọng từ bước test Motion/Transform trước đó trong cùng phiên (chưa deselect giữa các bước test) — đã rút kinh nghiệm: luôn deselect + verify qua `get_selected_clips` TRƯỚC khi test các tool xoá hàng loạt.
+
+**Live-tested lại sau fix**: chọn chính xác 1 clip (verify qua `get_selected_clips` trước khi xoá) → `remove_selected_clips` → đúng 1 clip bị xoá, clip khác giữ nguyên (verify qua `list_sequence_tracks`).
+
+## Chi tiết batch tool mới đợt 2 (nguồn AUDIT_MASTER_TOOL_LIST.md — đã live-test xong, xem mục ✅ phía trên)
 
 Theo yêu cầu user "làm toàn bộ lần lượt theo plan, xong 1 đợt commit thì chạy build tiếp" — tiếp tục từ `AUDIT_MASTER_TOOL_LIST.md` (187 tool tiềm năng, 20 nhóm), ưu tiên đúng thứ tự audit khuyến nghị: nhóm 1 (Keyframe) + nhóm 2 (Track) + nhóm 8 (Roll/Slip edit) đã xong đợt trước — đợt này làm **nhóm 9 (Motion/Transform)** + phần còn lại khả thi của **nhóm 8 (Editing precision)**.
 

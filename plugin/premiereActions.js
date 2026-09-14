@@ -1686,7 +1686,11 @@ async function trimClip({ inSeconds, outSeconds }) {
 async function deleteClip({ ripple = false }) {
   const { project, sequence, clip } = await getActiveSequenceAndSelection(function () {});
 
-  const mediaType = (await clip.getMediaType()) === "Audio"
+  // BUG (phát hiện + fix 2026-09-14, xem removeSelectedClips): getMediaType() trả về OBJECT enum
+  // thật, so `===` với string "Audio" luôn false — mọi clip từng bị coi là video. Không gây lỗi rõ
+  // ràng cho delete 1 clip đơn (native API vẫn chạy được dù sai constant) nhưng sai ngữ nghĩa.
+  const rawMediaType = await clip.getMediaType();
+  const mediaType = rawMediaType === ppro.Constants.MediaType.AUDIO
     ? ppro.Constants.MediaType.AUDIO
     : ppro.Constants.MediaType.VIDEO;
   const sequenceEditor = ppro.SequenceEditor.getEditor(sequence);
@@ -1851,49 +1855,60 @@ async function slipEdit({ offsetSeconds }, log) {
 // ============================================================================
 // GROUP — Motion/Transform (2026-09-14) — dựng trên component "Motion"/"Opacity" có sẵn mặc định
 // trên MỌI clip (đã xác nhận qua get_clip_effects — không cần tự thêm effect như Lumetri/Balance).
-// Position/Anchor Point dùng kiểu ppro.PointF() (pixel tuyệt đối, KHÔNG PHẢI toạ độ chuẩn hoá 0-1) —
-// pattern đã verify đúng từ code Beat Shake cũ (buildPositionValue/parsePositionValue phía trên).
-// Scale/Rotation/Opacity là number thường (%, độ, % theo thứ tự).
+//
+// ⚠️ ĐÍNH CHÍNH (2026-09-14, live-test): Position/Anchor Point của component Motion builtin đọc ra
+// dạng {value: [x,y]} — MẢNG CHUẨN HOÁ 0-1 (0.5,0.5 = giữa khung hình), KHÔNG PHẢI object {x,y} pixel
+// tuyệt đối như giả định cũ (comment gốc suy đoán từ code Beat Shake, chưa từng verify riêng cho
+// Motion — Beat Shake dùng effect "Transform" tự thêm khác hẳn, có thể đúng là pixel {x,y} cho effect
+// đó, không áp dụng cho Motion). Live-test: ghi x=960,y=540 (tưởng là pixel) thẳng vào PointF() ra kết
+// quả đọc lại [960,540] — vô lý vì normalize range chỉ 0-1, nghĩa là clip bị đẩy ra ngoài khung hình
+// xa. Giữ API tool ở pixel (dễ dùng cho người gọi) nhưng QUY ĐỔI sang chuẩn hoá 0-1 bằng
+// getFrameDimensions() trước khi ghi PointF, và quy đổi ngược lại khi đọc.
+// Scale/Rotation/Opacity là number thường (%, độ, % theo thứ tự) — không cần quy đổi.
 // ============================================================================
 
 async function setClipPosition({ x, y }, log) {
   if (x == null || y == null) throw new Error("Phải truyền x và y (toạ độ pixel tuyệt đối).");
-  const { project, clip } = await getActiveSequenceAndSelection(log);
+  const { project, sequence, clip } = await getActiveSequenceAndSelection(log);
   const comp = await findComponentByName(clip, "Motion");
   if (!comp) throw new Error("Không tìm thấy component Motion trên clip đang chọn.");
   const param = await findParamByName(comp, "Position");
   if (!param) throw new Error("Không tìm thấy param Position trong Motion.");
 
+  const { width, height } = await getFrameDimensions(sequence, log);
   const atTick = await clip.getInPoint();
   await project.lockedAccess(() => {
     project.executeTransaction((ca) => {
-      ca.addAction(setStaticKeyframe(param, buildPositionValue(x, y), atTick));
+      ca.addAction(setStaticKeyframe(param, buildPositionValue(x / width, y / height), atTick));
     }, "Set clip position");
   });
 
-  const raw = await param.getValueAtTime(atTick);
+  const raw = unwrapParamValue(await param.getValueAtTime(atTick));
   const parsed = parsePositionValue(raw);
-  return { applied: true, x, y, actualValueReadBack: parsed };
+  const actualValueReadBack = parsed ? { x: parsed.x * width, y: parsed.y * height } : null;
+  return { applied: true, x, y, actualValueReadBack };
 }
 
 async function setClipAnchorPoint({ x, y }, log) {
   if (x == null || y == null) throw new Error("Phải truyền x và y (toạ độ pixel tuyệt đối).");
-  const { project, clip } = await getActiveSequenceAndSelection(log);
+  const { project, sequence, clip } = await getActiveSequenceAndSelection(log);
   const comp = await findComponentByName(clip, "Motion");
   if (!comp) throw new Error("Không tìm thấy component Motion trên clip đang chọn.");
   const param = await findParamByName(comp, "Anchor Point");
   if (!param) throw new Error("Không tìm thấy param Anchor Point trong Motion.");
 
+  const { width, height } = await getFrameDimensions(sequence, log);
   const atTick = await clip.getInPoint();
   await project.lockedAccess(() => {
     project.executeTransaction((ca) => {
-      ca.addAction(setStaticKeyframe(param, buildPositionValue(x, y), atTick));
+      ca.addAction(setStaticKeyframe(param, buildPositionValue(x / width, y / height), atTick));
     }, "Set clip anchor point");
   });
 
-  const raw = await param.getValueAtTime(atTick);
+  const raw = unwrapParamValue(await param.getValueAtTime(atTick));
   const parsed = parsePositionValue(raw);
-  return { applied: true, x, y, actualValueReadBack: parsed };
+  const actualValueReadBack = parsed ? { x: parsed.x * width, y: parsed.y * height } : null;
+  return { applied: true, x, y, actualValueReadBack };
 }
 
 async function setClipScale({ scalePercent }, log) {
@@ -1954,9 +1969,10 @@ async function setClipOpacity({ percent }, log) {
 }
 
 async function getClipTransform(_params, log) {
-  const { clip } = await getActiveSequenceAndSelection(log);
+  const { sequence, clip } = await getActiveSequenceAndSelection(log);
   const atTick = await clip.getInPoint();
   const out = {};
+  const { width, height } = await getFrameDimensions(sequence, log);
 
   const motionComp = await findComponentByName(clip, "Motion");
   if (motionComp) {
@@ -1965,7 +1981,18 @@ async function getClipTransform(_params, log) {
         const param = await findParamByName(motionComp, paramName);
         if (!param) continue;
         const raw = await param.getValueAtTime(atTick);
-        out[key] = (key === "position" || key === "anchorPoint") ? parsePositionValue(raw) : unwrapParamValue(raw);
+        // QUAN TRỌNG (phát hiện 2026-09-14): Position/Anchor Point của component Motion đọc ra dạng
+        // {value: [x,y]} (mảng CHUẨN HOÁ 0-1, giống effect Transform tự thêm) — KHÔNG PHẢI {x,y} pixel
+        // tuyệt đối như giả định cũ trong parsePositionValue()/buildPositionValue() (chưa từng verify
+        // riêng cho Motion, chỉ suy đoán từ code Beat Shake cũ). Phải unwrapParamValue() TRƯỚC khi đưa
+        // vào parsePositionValue(), nếu không luôn nhận nhầm {value:[...]} là "không nhận diện được".
+        // Quy đổi ra pixel để nhất quán với đơn vị pixel dùng ở set_clip_position/set_clip_anchor_point.
+        if (key === "position" || key === "anchorPoint") {
+          const parsed = parsePositionValue(unwrapParamValue(raw));
+          out[key] = parsed ? { x: parsed.x * width, y: parsed.y * height } : null;
+        } else {
+          out[key] = unwrapParamValue(raw);
+        }
       } catch (e) { out[key] = { error: e.message }; }
     }
   }
@@ -1992,19 +2019,25 @@ async function removeSelectedClips({ ripple = false }, log) {
   const { project, sequence, clips } = await getActiveSequenceAndAllSelection(log);
   const sequenceEditor = ppro.SequenceEditor.getEditor(sequence);
 
+  // BUG (phát hiện + fix 2026-09-14): `item.getMediaType()` KHÔNG trả về string "Audio"/"Video" như
+  // giả định cũ (dùng ở cả deleteClip) — trả về 1 OBJECT enum thật (so `===` với string luôn false).
+  // So sánh đúng phải dùng identity với hằng số `ppro.Constants.MediaType.AUDIO`/`VIDEO`. Bug cũ khiến
+  // MỌI item (kể cả audio) đều bị xếp nhầm vào nhóm "video" — không gây lỗi rõ ràng (native API vẫn
+  // chấp nhận, có thể do dựa chủ yếu vào nội dung selection hơn tham số mediaType) nhưng sai ngữ nghĩa,
+  // rủi ro hành vi không đúng khi mix video+audio trong 1 lần xoá.
   let deleted = 0;
   for (const mediaTypeName of ["video", "audio"]) {
+    const targetConst = mediaTypeName === "audio" ? ppro.Constants.MediaType.AUDIO : ppro.Constants.MediaType.VIDEO;
     const group = [];
     for (const item of clips) {
       const mt = await item.getMediaType();
-      if ((mediaTypeName === "audio") === (mt === "Audio")) group.push(item);
+      if (mt === targetConst) group.push(item);
     }
     if (group.length === 0) continue;
     const selectionObj = await _buildSelectionObject(sequence, group);
-    const mt = mediaTypeName === "audio" ? ppro.Constants.MediaType.AUDIO : ppro.Constants.MediaType.VIDEO;
     await project.lockedAccess(() => {
       project.executeTransaction((ca) => {
-        ca.addAction(sequenceEditor.createRemoveItemsAction(selectionObj, ripple, mt));
+        ca.addAction(sequenceEditor.createRemoveItemsAction(selectionObj, ripple, targetConst));
       }, "Xoá tất cả clip đang chọn qua MCP");
     });
     deleted += group.length;
