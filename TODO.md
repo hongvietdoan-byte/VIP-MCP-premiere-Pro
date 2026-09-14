@@ -2,6 +2,16 @@
 
 Cập nhật lần cuối: 2026-09-14. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
+## 🔨 4 tool Playhead & Sequence In/Out mới — ĐÃ CODE, CHỜ RESTART ĐỂ LIVE-TEST (2026-09-14)
+
+Tiếp tục nhóm 20 (Playback/Navigation) từ `AUDIT_MASTER_TOOL_LIST.md`. Probe trực tiếp prototype `Sequence` (hijack tạm `list_sequence_tracks`, không cần restart) xác nhận:
+- `getPlayerPosition()`/`setPlayerPosition()` → `get_playhead_position`/`set_playhead_position` khả thi.
+- `getInPoint()`/`getOutPoint()`/`createSetInPointAction()`/`createSetOutPointAction()` trên object Sequence (khác cùng tên method trên TrackItem — đây là work-area IN/OUT của cả sequence, không phải của 1 clip) → `get_sequence_in_out_points`/`set_sequence_in_out_points` khả thi.
+- **Không thấy** method play/stop/step-forward/step-backward nào — xác nhận thêm bằng chứng cho pattern đã biết: Premiere UXP không có command/menu execution API, chỉ đọc/ghi state trực tiếp. `play`/`stop`/`step_forward`/`step_backward` KHÔNG khả thi, không code.
+- Phát hiện thêm (chưa dùng, để dành sau): `createSubsequence()`, `getZeroPoint()`/`createSetZeroPointAction()` — có thể dùng cho `create_subsequence`/`set_zero_point` nếu làm tiếp nhóm 7 (Sequence management nâng cao).
+
+**Cần restart app Claude** để nạp schema mới.
+
 ## ✅ `get_clip_volume`/`set_clip_mute` — ĐÃ LIVE-TEST ĐÚNG, KHÔNG BUG (2026-09-14)
 
 Live-test trên sequence test riêng (verify qua `get_status` trước khi ghi). `get_clip_volume` đọc đúng `gainDb`+`muted`. `set_clip_mute(true)` → verify độc lập qua `get_clip_volume` lần 2 xác nhận `muted:true`, `gainDb` giữ nguyên không đổi (mute độc lập với gain, đúng kỳ vọng). `set_clip_mute(false)` unmute lại → verify đúng. Cả 2 tool đúng ngay từ lần code đầu nhờ probe param `Mute` trước khi viết.

@@ -215,7 +215,9 @@ function _sendReadyMessage() {
                    "remove_selected_clips", "extract_selection", "lift_selection",
                    "rename_clip", "enable_disable_clip",
                    "get_effect_properties", "remove_all_effects",
-                   "get_clip_volume", "set_clip_mute"]
+                   "get_clip_volume", "set_clip_mute",
+                   "get_playhead_position", "set_playhead_position",
+                   "get_sequence_in_out_points", "set_sequence_in_out_points"]
   }));
 }
 
@@ -395,6 +397,12 @@ async function _dispatchCommand(msg) {
       // Group 24: Audio nâng cao cấp clip (2026-09-14)
       case "get_clip_volume":        result = await getClipVolume(params, bLog);                    break;
       case "set_clip_mute":          result = await setClipMute(params, bLog);                       break;
+
+      // Group 25: Playhead & Sequence In/Out (2026-09-14)
+      case "get_playhead_position":  result = await getPlayheadPosition();                          break;
+      case "set_playhead_position":  result = await setPlayheadPosition(params);                    break;
+      case "get_sequence_in_out_points": result = await getSequenceInOutPoints();                   break;
+      case "set_sequence_in_out_points": result = await setSequenceInOutPoints(params);              break;
 
       default:
         throw new Error("Tool không được hỗ trợ: " + tool + ". Dùng get_beat_styles để xem danh sách.");

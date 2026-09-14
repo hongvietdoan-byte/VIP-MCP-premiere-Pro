@@ -1873,5 +1873,57 @@ export const PREMIERE_TOOLS = [
     execute(wsBridge, args) {
       return wsBridge.sendCommand('set_clip_mute', { muted: args.muted }, 15000);
     }
+  },
+
+  // ==========================================================================
+  // GROUP 25 — Playhead & Sequence In/Out (2026-09-14)
+  // ==========================================================================
+  {
+    name: 'get_playhead_position',
+    description: 'Đọc vị trí playhead (CTI) hiện tại trên sequence đang active, tính bằng giây.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('get_playhead_position', {}, 15000);
+    }
+  },
+
+  {
+    name: 'set_playhead_position',
+    description: 'Di chuyển playhead (CTI) trên sequence đang active tới thời điểm chỉ định.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        seconds: { type: 'number', description: 'Thời điểm cần di chuyển tới (giây).' }
+      },
+      required: ['seconds']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_playhead_position', { seconds: args.seconds }, 15000);
+    }
+  },
+
+  {
+    name: 'get_sequence_in_out_points',
+    description: 'Đọc điểm in/out (work area) hiện tại của sequence đang active — khác in/out của 1 clip cụ thể.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('get_sequence_in_out_points', {}, 15000);
+    }
+  },
+
+  {
+    name: 'set_sequence_in_out_points',
+    description: 'Đặt điểm in/out (work area) của sequence đang active — dùng cho export theo work area, không phải in/out của 1 clip cụ thể.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        inSeconds: { type: 'number', description: 'Điểm in mới (giây). Bỏ trống nếu chỉ đổi out.' },
+        outSeconds: { type: 'number', description: 'Điểm out mới (giây). Bỏ trống nếu chỉ đổi in.' }
+      },
+      required: []
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_sequence_in_out_points', { inSeconds: args.inSeconds, outSeconds: args.outSeconds }, 15000);
+    }
   }
 ];

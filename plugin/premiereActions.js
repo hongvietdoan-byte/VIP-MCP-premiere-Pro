@@ -2824,6 +2824,65 @@ async function setClipMute({ muted }, log) {
   return { muted, actualMuted };
 }
 
+// ============================================================================
+// GROUP — Playhead & Sequence In/Out (2026-09-14) — API xác nhận qua probe trực tiếp prototype
+// Sequence: getPlayerPosition/setPlayerPosition (playhead), getInPoint/getOutPoint/
+// createSetInPointAction/createSetOutPointAction (work-area in/out của SEQUENCE — khác in/out của
+// clip, cùng tên method nhưng gọi trên object Sequence).
+// ============================================================================
+
+async function getPlayheadPosition() {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  const pos = await sequence.getPlayerPosition();
+  return { seconds: pos.seconds };
+}
+
+async function setPlayheadPosition({ seconds }) {
+  if (seconds == null) throw new Error("Phải truyền seconds.");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  await sequence.setPlayerPosition(secondsToTick(seconds));
+  const actualSeconds = (await sequence.getPlayerPosition()).seconds;
+  return { seconds, actualSeconds };
+}
+
+async function getSequenceInOutPoints() {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  const inPoint = (await sequence.getInPoint()).seconds;
+  const outPoint = (await sequence.getOutPoint()).seconds;
+  return { inSeconds: inPoint, outSeconds: outPoint };
+}
+
+async function setSequenceInOutPoints({ inSeconds, outSeconds }) {
+  if (inSeconds == null && outSeconds == null) throw new Error("Phải truyền ít nhất inSeconds hoặc outSeconds.");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      if (inSeconds != null) ca.addAction(sequence.createSetInPointAction(secondsToTick(inSeconds)));
+      if (outSeconds != null) ca.addAction(sequence.createSetOutPointAction(secondsToTick(outSeconds)));
+    }, "Set sequence in/out point qua MCP");
+  });
+
+  const actualIn = (await sequence.getInPoint()).seconds;
+  const actualOut = (await sequence.getOutPoint()).seconds;
+  return { inSeconds: actualIn, outSeconds: actualOut };
+}
+
 async function setClipPan({ panValue }, log) {
   const { project, clip } = await getActiveSequenceAndSelection(log);
 
