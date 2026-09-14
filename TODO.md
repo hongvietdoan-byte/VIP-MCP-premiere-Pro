@@ -156,6 +156,14 @@ Core tool cho use case gốc (đặt ảnh/clip lên timeline theo time range).
 - **`get_clip_metadata`/`set_clip_metadata`** — `projectItem.getXMPMetadata` không tồn tại. **CHƯA tìm ra API đúng** — docs Adobe UXP hiện tại không liệt kê method XMP metadata nào trên `ProjectItem`. Code giờ báo lỗi rõ kèm liệt kê toàn bộ prototype thật của `projectItem` (khi gọi sẽ thấy list) thay vì lỗi mù mờ — cần gọi thử `get_clip_metadata` với 1 clip đang chọn để xem danh sách method thật, rồi tra xem có method nào khác đảm nhiệm XMP không (có thể metadata phải qua 1 class riêng chưa được expose ở `ppro.*`, hoặc thật sự chưa có API — cần điều tra thêm).
 - **`move_clip`** — sửa dùng `createMoveAction` từ 2026-09-09, giờ đã unblock được vì `select_all_clips` hoạt động thật → có thể chọn clip bằng script rồi test `move_clip`. **CHƯA LIVE-TEST** (việc tiếp theo).
 
+## ✅ Bug fix — `get_sequence_info` báo sai frameRate (2026-09-14)
+
+`_cmdGetSequenceInfo` trong `plugin/mcpBridge.js` (dùng bởi `get_status`/`get_sequence_info`) hardcode `frameRate = 25` mặc định và **không bao giờ gán giá trị thật** — code cũ chỉ nhét kết quả `getVideoFrameRate()` vào 1 object `_fpsDebug` để probe (sót lại từ lúc điều tra Ưu tiên 0), rồi trả về luôn giá trị mặc định 25 không đổi. Phát hiện khi user thấy `get_status` báo `frameRate: 25` trong khi `_fpsDebug.getVideoFrameRateValue` lại đúng là `23.976...`.
+
+**Đã fix**: dùng đúng pattern đã xác nhận chuẩn ở `getSequenceSettings()` (`plugin/premiereActions.js`) — ưu tiên `settings.getVideoFrameRate().value` (chỉ có từ Premiere 26.2+), fallback tính từ `sequence.getTimebase()` cho bản cũ hơn. Trả thêm `fpsSource` (`"getVideoFrameRate"` | `"timebaseGuess"` | `"error: ..."`) để biết đường nào được dùng. Bỏ hẳn field debug `_fpsDebug` (không cần probe nữa, API đã xác nhận rõ).
+
+**Live-tested**: `get_sequence_info` trên "Sequence 01" (1080x1920) → `frameRate: 60, fpsSource: "getVideoFrameRate"` — đúng thật, không còn báo sai 25/làm tròn.
+
 ## Ưu tiên 3 — Test theo đợt ~40 tool còn lại
 
 `cut_clip_at_time`, `trim_clip`, `delete_clip`, `ripple_delete`, `detect_silence_regions`, `remove_silence_gaps`, `apply_effect`, `set_effect_param`, `remove_effect`, `search_effects`, `list_available_transitions`, `set_clip_volume`, `set_clip_pan`, `mute_track`, `setup_audio_ducking`, `add_transition`, `batch_add_transitions`, `apply_lumetri_preset`, `set_clip_color_label`, `adjust_color_values`, `create_caption_track`, `import_srt`, `set_clip_speed`, `reverse_clip`, `freeze_frame`, `replace_clip_media`, `relink_offline_media`, `detect_scene_edits`, `set_clip_metadata`, `import_mogrt`, `capture_frame`, `export_as_xml`, `export_to_media_encoder`, `transcribe_clip`, `auto_caption_from_speech`, `duplicate_clip`, `import_transcript_json` (thử nghiệm), `move_clip`, `move_item_to_bin`.
