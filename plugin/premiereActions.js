@@ -2785,6 +2785,45 @@ async function setClipVolume({ gainDb }, log) {
   return { applied: true, gainDb, actualValueReadBack: actualGainDb };
 }
 
+async function getClipVolume(_params, log) {
+  const { clip } = await getActiveSequenceAndSelection(log);
+  let comp = await findComponentByMatchName(clip, "ADBE Volume");
+  if (!comp) comp = await findComponentByName(clip, "Volume");
+  if (!comp) throw new Error("Không tìm thấy component Volume trên clip đang chọn. Clip có phải audio track không?");
+
+  const param = await findParamByName(comp, "Level");
+  if (!param) throw new Error("Không tìm thấy param 'Level' trong Volume component.");
+  const muteParam = await findParamByName(comp, "Mute");
+
+  const atTick = await clip.getInPoint();
+  const gainDb = unwrapParamValue(await param.getValueAtTime(atTick));
+  const muted = muteParam ? unwrapParamValue(await muteParam.getValueAtTime(atTick)) : null;
+  return { gainDb, muted };
+}
+
+// Param "Mute" có sẵn trên component Volume (khác set_clip_pan/Balance — không cần tự thêm effect).
+// Xác nhận qua get_effect_properties: {displayName:"Mute", value:false} tại index 0.
+async function setClipMute({ muted }, log) {
+  if (muted == null) throw new Error("Phải truyền muted (true/false).");
+  const { project, clip } = await getActiveSequenceAndSelection(log);
+  let comp = await findComponentByMatchName(clip, "ADBE Volume");
+  if (!comp) comp = await findComponentByName(clip, "Volume");
+  if (!comp) throw new Error("Không tìm thấy component Volume trên clip đang chọn. Clip có phải audio track không?");
+
+  const param = await findParamByName(comp, "Mute");
+  if (!param) throw new Error("Không tìm thấy param 'Mute' trong Volume component.");
+
+  const atTick = await clip.getInPoint();
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(setStaticKeyframe(param, muted, atTick));
+    }, "Set clip mute");
+  });
+
+  const actualMuted = unwrapParamValue(await param.getValueAtTime(atTick));
+  return { muted, actualMuted };
+}
+
 async function setClipPan({ panValue }, log) {
   const { project, clip } = await getActiveSequenceAndSelection(log);
 

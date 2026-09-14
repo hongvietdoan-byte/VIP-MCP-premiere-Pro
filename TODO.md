@@ -2,6 +2,14 @@
 
 Cập nhật lần cuối: 2026-09-14. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
+## 🔨 `get_clip_volume`/`set_clip_mute` mới — ĐÃ CODE, CHỜ RESTART ĐỂ LIVE-TEST (2026-09-14)
+
+Tiếp tục nhóm 13 (Audio nâng cao) từ `AUDIT_MASTER_TOOL_LIST.md`. Trước khi code:
+- **Xác nhận `set_track_volume`/`set_track_pan`/`solo_track` KHÔNG khả thi** — dựa vào kết quả probe `Track` prototype đã có từ trước (mục track management, 2026-09-14 đợt đầu): Track chỉ có `createSetNameAction/setMute/getMediaType/getIndex/isMuted/getTrackItems`, không có method volume/pan/solo nào. Loại khỏi kế hoạch.
+- `get_clip_volume`/`set_clip_mute` khả thi: probe `get_effect_properties("Internal Volume Stereo")` cho thấy component Volume có sẵn param **`Mute`** (boolean, index 0) bên cạnh `Level` (dB, đã dùng ở `set_clip_volume` cũ) — dùng trực tiếp, không cần tự thêm effect như Balance.
+
+**Cần restart app Claude** để nạp schema mới.
+
 ## ✅ `get_effect_properties`/`remove_all_effects` — ĐÃ LIVE-TEST, 1 BUG AN TOÀN ĐÃ FIX (2026-09-14)
 
 `get_effect_properties` đúng ngay từ đầu — đọc đủ tên/giá trị/keyframeCount của từng param, verify trên effect Gaussian Blur (Blurriness/Blur Dimensions/param không tên thứ 3).

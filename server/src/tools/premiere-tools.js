@@ -1846,5 +1846,32 @@ export const PREMIERE_TOOLS = [
     execute(wsBridge, args) {
       return wsBridge.sendCommand('remove_all_effects', { includeIntrinsic: args.includeIntrinsic }, 20000);
     }
+  },
+
+  // ==========================================================================
+  // GROUP 24 — Audio nâng cao cấp clip (2026-09-14)
+  // ==========================================================================
+  {
+    name: 'get_clip_volume',
+    description: 'Đọc gain (dB) và trạng thái mute hiện tại của clip audio đang chọn. Chỉ đọc.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('get_clip_volume', {}, 15000);
+    }
+  },
+
+  {
+    name: 'set_clip_mute',
+    description: 'Mute/unmute 1 clip audio riêng lẻ trên timeline (khác mute_track mute cả track).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        muted: { type: 'boolean', description: 'true = mute, false = unmute.' }
+      },
+      required: ['muted']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_clip_mute', { muted: args.muted }, 15000);
+    }
   }
 ];
