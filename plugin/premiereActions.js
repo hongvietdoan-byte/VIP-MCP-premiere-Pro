@@ -1848,6 +1848,212 @@ async function slipEdit({ offsetSeconds }, log) {
   return { slipped: true, offsetSeconds, actualInPoint: actualIn, actualOutPoint: actualOut, actualStartSeconds, driftCompensatedSeconds: driftSeconds };
 }
 
+// ============================================================================
+// GROUP — Motion/Transform (2026-09-14) — dựng trên component "Motion"/"Opacity" có sẵn mặc định
+// trên MỌI clip (đã xác nhận qua get_clip_effects — không cần tự thêm effect như Lumetri/Balance).
+// Position/Anchor Point dùng kiểu ppro.PointF() (pixel tuyệt đối, KHÔNG PHẢI toạ độ chuẩn hoá 0-1) —
+// pattern đã verify đúng từ code Beat Shake cũ (buildPositionValue/parsePositionValue phía trên).
+// Scale/Rotation/Opacity là number thường (%, độ, % theo thứ tự).
+// ============================================================================
+
+async function setClipPosition({ x, y }, log) {
+  if (x == null || y == null) throw new Error("Phải truyền x và y (toạ độ pixel tuyệt đối).");
+  const { project, clip } = await getActiveSequenceAndSelection(log);
+  const comp = await findComponentByName(clip, "Motion");
+  if (!comp) throw new Error("Không tìm thấy component Motion trên clip đang chọn.");
+  const param = await findParamByName(comp, "Position");
+  if (!param) throw new Error("Không tìm thấy param Position trong Motion.");
+
+  const atTick = await clip.getInPoint();
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(setStaticKeyframe(param, buildPositionValue(x, y), atTick));
+    }, "Set clip position");
+  });
+
+  const raw = await param.getValueAtTime(atTick);
+  const parsed = parsePositionValue(raw);
+  return { applied: true, x, y, actualValueReadBack: parsed };
+}
+
+async function setClipAnchorPoint({ x, y }, log) {
+  if (x == null || y == null) throw new Error("Phải truyền x và y (toạ độ pixel tuyệt đối).");
+  const { project, clip } = await getActiveSequenceAndSelection(log);
+  const comp = await findComponentByName(clip, "Motion");
+  if (!comp) throw new Error("Không tìm thấy component Motion trên clip đang chọn.");
+  const param = await findParamByName(comp, "Anchor Point");
+  if (!param) throw new Error("Không tìm thấy param Anchor Point trong Motion.");
+
+  const atTick = await clip.getInPoint();
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(setStaticKeyframe(param, buildPositionValue(x, y), atTick));
+    }, "Set clip anchor point");
+  });
+
+  const raw = await param.getValueAtTime(atTick);
+  const parsed = parsePositionValue(raw);
+  return { applied: true, x, y, actualValueReadBack: parsed };
+}
+
+async function setClipScale({ scalePercent }, log) {
+  if (scalePercent == null) throw new Error("Phải truyền scalePercent.");
+  const { project, clip } = await getActiveSequenceAndSelection(log);
+  const comp = await findComponentByName(clip, "Motion");
+  if (!comp) throw new Error("Không tìm thấy component Motion trên clip đang chọn.");
+  const param = await findParamByName(comp, "Scale");
+  if (!param) throw new Error("Không tìm thấy param Scale trong Motion.");
+
+  const atTick = await clip.getInPoint();
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(setStaticKeyframe(param, scalePercent, atTick));
+    }, "Set clip scale");
+  });
+
+  const actualValueReadBack = unwrapParamValue(await param.getValueAtTime(atTick));
+  return { applied: true, scalePercent, actualValueReadBack };
+}
+
+async function setClipRotation({ degrees }, log) {
+  if (degrees == null) throw new Error("Phải truyền degrees.");
+  const { project, clip } = await getActiveSequenceAndSelection(log);
+  const comp = await findComponentByName(clip, "Motion");
+  if (!comp) throw new Error("Không tìm thấy component Motion trên clip đang chọn.");
+  const param = await findParamByName(comp, "Rotation");
+  if (!param) throw new Error("Không tìm thấy param Rotation trong Motion.");
+
+  const atTick = await clip.getInPoint();
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(setStaticKeyframe(param, degrees, atTick));
+    }, "Set clip rotation");
+  });
+
+  const actualValueReadBack = unwrapParamValue(await param.getValueAtTime(atTick));
+  return { applied: true, degrees, actualValueReadBack };
+}
+
+async function setClipOpacity({ percent }, log) {
+  if (percent == null) throw new Error("Phải truyền percent (0-100).");
+  const { project, clip } = await getActiveSequenceAndSelection(log);
+  const comp = await findComponentByName(clip, "Opacity");
+  if (!comp) throw new Error("Không tìm thấy component Opacity trên clip đang chọn.");
+  const param = await findParamByName(comp, "Opacity");
+  if (!param) throw new Error("Không tìm thấy param Opacity trong component Opacity.");
+
+  const atTick = await clip.getInPoint();
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(setStaticKeyframe(param, percent, atTick));
+    }, "Set clip opacity");
+  });
+
+  const actualValueReadBack = unwrapParamValue(await param.getValueAtTime(atTick));
+  return { applied: true, percent, actualValueReadBack };
+}
+
+async function getClipTransform(_params, log) {
+  const { clip } = await getActiveSequenceAndSelection(log);
+  const atTick = await clip.getInPoint();
+  const out = {};
+
+  const motionComp = await findComponentByName(clip, "Motion");
+  if (motionComp) {
+    for (const [key, paramName] of [["position", "Position"], ["anchorPoint", "Anchor Point"], ["scale", "Scale"], ["rotation", "Rotation"]]) {
+      try {
+        const param = await findParamByName(motionComp, paramName);
+        if (!param) continue;
+        const raw = await param.getValueAtTime(atTick);
+        out[key] = (key === "position" || key === "anchorPoint") ? parsePositionValue(raw) : unwrapParamValue(raw);
+      } catch (e) { out[key] = { error: e.message }; }
+    }
+  }
+  const opacityComp = await findComponentByName(clip, "Opacity");
+  if (opacityComp) {
+    try {
+      const param = await findParamByName(opacityComp, "Opacity");
+      if (param) out.opacity = unwrapParamValue(await param.getValueAtTime(atTick));
+    } catch (e) { out.opacity = { error: e.message }; }
+  }
+
+  return out;
+}
+
+// ============================================================================
+// GROUP — Xoá theo lựa chọn/khoảng thời gian (2026-09-14) — dựng trên
+// SequenceEditor.createRemoveItemsAction đã verify đúng ở deleteClip/rippleDelete (3 tham số:
+// selection, ripple, mediaType). remove_selected_clips xoá TOÀN BỘ clip đang chọn (không chỉ 1 clip
+// như delete_clip); extract_selection/lift_selection xoá theo KHOẢNG THỜI GIAN (khác rippleDelete ở
+// chỗ tường minh 2 tool riêng ripple/không-ripple, khớp thuật ngữ "Extract"/"Lift" chuẩn NLE).
+// ============================================================================
+
+async function removeSelectedClips({ ripple = false }, log) {
+  const { project, sequence, clips } = await getActiveSequenceAndAllSelection(log);
+  const sequenceEditor = ppro.SequenceEditor.getEditor(sequence);
+
+  let deleted = 0;
+  for (const mediaTypeName of ["video", "audio"]) {
+    const group = [];
+    for (const item of clips) {
+      const mt = await item.getMediaType();
+      if ((mediaTypeName === "audio") === (mt === "Audio")) group.push(item);
+    }
+    if (group.length === 0) continue;
+    const selectionObj = await _buildSelectionObject(sequence, group);
+    const mt = mediaTypeName === "audio" ? ppro.Constants.MediaType.AUDIO : ppro.Constants.MediaType.VIDEO;
+    await project.lockedAccess(() => {
+      project.executeTransaction((ca) => {
+        ca.addAction(sequenceEditor.createRemoveItemsAction(selectionObj, ripple, mt));
+      }, "Xoá tất cả clip đang chọn qua MCP");
+    });
+    deleted += group.length;
+  }
+
+  return { deleted, ripple };
+}
+
+async function _removeItemsInTimeRange({ startSeconds, endSeconds, trackType = "all", ripple }, log) {
+  if (startSeconds == null || endSeconds == null) throw new Error("Phải truyền startSeconds và endSeconds.");
+  if (startSeconds >= endSeconds) throw new Error(`startSeconds (${startSeconds}) phải nhỏ hơn endSeconds (${endSeconds}).`);
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  const startTick = secondsToTick(startSeconds);
+  const endTick = secondsToTick(endSeconds);
+  const items = await getTrackItemsInRange(sequence, startTick, endTick, trackType);
+  if (items.length === 0) {
+    return { removed: false, message: "Không tìm thấy clip nào trong khoảng này.", startSeconds, endSeconds };
+  }
+
+  const sequenceEditor = ppro.SequenceEditor.getEditor(sequence);
+  let deleted = 0;
+  for (const mt of ["video", "audio"]) {
+    const group = items.filter((i) => i.trackType === mt);
+    if (group.length === 0) continue;
+    const selectionObj = await _buildSelectionObject(sequence, group.map((i) => i.item));
+    const mediaType = mt === "audio" ? ppro.Constants.MediaType.AUDIO : ppro.Constants.MediaType.VIDEO;
+    await project.lockedAccess(() => {
+      project.executeTransaction((ca) => {
+        ca.addAction(sequenceEditor.createRemoveItemsAction(selectionObj, ripple, mediaType));
+      }, "Xoá clip theo khoảng thời gian qua MCP");
+    });
+    deleted += group.length;
+  }
+
+  return { removed: deleted > 0, deleted, startSeconds, endSeconds, ripple };
+}
+
+async function extractSelection({ startSeconds, endSeconds, trackType = "all" }, log) {
+  return _removeItemsInTimeRange({ startSeconds, endSeconds, trackType, ripple: true }, log);
+}
+
+async function liftSelection({ startSeconds, endSeconds, trackType = "all" }, log) {
+  return _removeItemsInTimeRange({ startSeconds, endSeconds, trackType, ripple: false }, log);
+}
+
 async function moveClip({ startSeconds, trackIndex }) {
   // Sửa 2026-09-10 (CHƯA LIVE-TEST): `createSetStartTimeAction` không tồn tại trên track item (phát
   // hiện khi debug insert_clip — xem [[premiere-25-6-4-api-corrections]]). API đúng để di chuyển vị

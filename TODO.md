@@ -2,6 +2,21 @@
 
 Cập nhật lần cuối: 2026-09-14. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
+## 🔨 Batch tool mới đợt 2 từ AUDIT_MASTER_TOOL_LIST.md — ĐÃ CODE, CHỜ RESTART CLAUDE ĐỂ LIVE-TEST (2026-09-14)
+
+Theo yêu cầu user "làm toàn bộ lần lượt theo plan, xong 1 đợt commit thì chạy build tiếp" — tiếp tục từ `AUDIT_MASTER_TOOL_LIST.md` (187 tool tiềm năng, 20 nhóm), ưu tiên đúng thứ tự audit khuyến nghị: nhóm 1 (Keyframe) + nhóm 2 (Track) + nhóm 8 (Roll/Slip edit) đã xong đợt trước — đợt này làm **nhóm 9 (Motion/Transform)** + phần còn lại khả thi của **nhóm 8 (Editing precision)**.
+
+**9 tool mới** (`plugin/premiereActions.js`, wire vào `plugin/mcpBridge.js` + `server/src/tools/premiere-tools.js`):
+- `set_clip_position`/`set_clip_anchor_point` — dùng `ppro.PointF()` (pixel tuyệt đối), tái dùng pattern `buildPositionValue`/`parsePositionValue` đã verify đúng từ code Beat Shake cũ.
+- `set_clip_scale`/`set_clip_rotation`/`set_clip_opacity` — number thường qua component Motion/Opacity có sẵn mặc định trên mọi clip (không cần tự thêm effect).
+- `get_clip_transform` — đọc gộp cả 5 giá trị trên trong 1 lệnh.
+- `remove_selected_clips` — xoá TOÀN BỘ clip đang chọn (khác `delete_clip` chỉ 1 clip), tái dùng `createRemoveItemsAction` đã verify đúng.
+- `extract_selection`/`lift_selection` — xoá theo khoảng thời gian, ripple/không-ripple, tái dùng cùng pattern `rippleDelete` đã có (helper chung `_removeItemsInTimeRange`).
+
+**Chưa làm trong đợt này** (cần probe API trực tiếp trước khi code, để dành đợt sau): `rename_clip`, `enable_disable_clip`, `link_selection`/`unlink_selection`, `move_clip_to_track`, `slide_edit` — chưa có xác nhận API nào từ trước trong dự án, rủi ro đoán sai chữ ký cao (giống bài học `move_item_to_bin`/`delete_clip` cũ), nên để lại probe sống qua UXP trước khi viết code thay vì đoán mù.
+
+**Cần restart hẳn app Claude** để nạp tool schema mới bên server trước khi live-test (pattern giống hệt đợt 9 tool trước — sửa `plugin/*.js` tự reload, nhưng thêm tool mới ở `server/src/tools/premiere-tools.js` thì không).
+
 ## ✅ `scripts/Chuyen_Doi_Mic_Check.bat` — kéo-thả file docx, không cần gõ lệnh (2026-09-10)
 
 Cách dùng đơn giản nhất cho `docx_to_mic_check.py`: kéo file `.docx` thả vào file `.bat` này (đặt shortcut ra Desktop nếu muốn) — tự suy ra `--images`/`--out-dir` từ đúng thư mục chứa file docx (đúng quy ước "mọi thứ nằm phẳng 1 thư mục" của workflow Mic Check), tự kiểm tra Python đã cài chưa, tự báo lỗi rõ nếu thả nhầm file không phải `.docx`.

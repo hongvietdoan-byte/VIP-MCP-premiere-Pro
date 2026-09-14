@@ -1637,5 +1637,148 @@ export const PREMIERE_TOOLS = [
     execute(wsBridge, args) {
       return wsBridge.sendCommand('import_transcript_json', args, 30000);
     }
+  },
+
+  // ==========================================================================
+  // GROUP 20 — Motion/Transform (2026-09-14): dựng trên component "Motion"/"Opacity"
+  // có sẵn mặc định trên mọi clip. Position/Anchor Point dùng toạ độ pixel tuyệt đối
+  // (không phải % chuẩn hoá 0-1).
+  // ==========================================================================
+  {
+    name: 'set_clip_position',
+    description: 'Đặt vị trí (Position) của clip đang chọn qua effect Motion. Toạ độ pixel tuyệt đối (không phải % chuẩn hoá), gốc (0,0) ở góc trên-trái khung hình.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        x: { type: 'number', description: 'Toạ độ X (pixel).' },
+        y: { type: 'number', description: 'Toạ độ Y (pixel).' }
+      },
+      required: ['x', 'y']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_clip_position', { x: args.x, y: args.y }, 15000);
+    }
+  },
+
+  {
+    name: 'set_clip_anchor_point',
+    description: 'Đặt điểm neo (Anchor Point) của clip đang chọn qua effect Motion — điểm mốc để Scale/Rotation xoay quanh. Toạ độ pixel tuyệt đối, tương đối so với clip nguồn.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        x: { type: 'number', description: 'Toạ độ X (pixel).' },
+        y: { type: 'number', description: 'Toạ độ Y (pixel).' }
+      },
+      required: ['x', 'y']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_clip_anchor_point', { x: args.x, y: args.y }, 15000);
+    }
+  },
+
+  {
+    name: 'set_clip_scale',
+    description: 'Đặt tỷ lệ phóng to/thu nhỏ (Scale) của clip đang chọn qua effect Motion. 100 = kích thước gốc.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        scalePercent: { type: 'number', description: 'Tỷ lệ phần trăm, vd 100 = gốc, 50 = nửa, 200 = gấp đôi.' }
+      },
+      required: ['scalePercent']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_clip_scale', { scalePercent: args.scalePercent }, 15000);
+    }
+  },
+
+  {
+    name: 'set_clip_rotation',
+    description: 'Đặt góc xoay (Rotation) của clip đang chọn qua effect Motion.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        degrees: { type: 'number', description: 'Góc xoay tính bằng độ. 0 = không xoay.' }
+      },
+      required: ['degrees']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_clip_rotation', { degrees: args.degrees }, 15000);
+    }
+  },
+
+  {
+    name: 'set_clip_opacity',
+    description: 'Đặt độ mờ đục (Opacity) của clip đang chọn.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        percent: { type: 'number', description: 'Phần trăm độ mờ đục (0-100). 100 = hiện rõ hoàn toàn, 0 = trong suốt.' }
+      },
+      required: ['percent']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_clip_opacity', { percent: args.percent }, 15000);
+    }
+  },
+
+  {
+    name: 'get_clip_transform',
+    description: 'Đọc toàn bộ thông số transform hiện tại của clip đang chọn: position, anchorPoint, scale, rotation, opacity. Chỉ đọc.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('get_clip_transform', {}, 15000);
+    }
+  },
+
+  // ==========================================================================
+  // GROUP 21 — Xoá theo lựa chọn/khoảng thời gian (2026-09-14)
+  // ==========================================================================
+  {
+    name: 'remove_selected_clips',
+    description: 'Xoá TOÀN BỘ clip đang được chọn trên timeline trong 1 lệnh (khác delete_clip chỉ xoá 1 clip).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ripple: { type: 'boolean', description: 'true = ripple delete (đóng khoảng trống), false (mặc định) = giữ nguyên khoảng trống.' }
+      },
+      required: []
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('remove_selected_clips', { ripple: args.ripple }, 20000);
+    }
+  },
+
+  {
+    name: 'extract_selection',
+    description: 'Xoá toàn bộ clip nằm trong khoảng thời gian chỉ định VÀ đóng khoảng trống (ripple) — tương đương "Extract" trong Premiere.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        startSeconds: { type: 'number', description: 'Bắt đầu khoảng cần xoá (giây).' },
+        endSeconds: { type: 'number', description: 'Kết thúc khoảng cần xoá (giây).' },
+        trackType: { type: 'string', enum: ['video', 'audio', 'all'], description: 'Mặc định "all".' }
+      },
+      required: ['startSeconds', 'endSeconds']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('extract_selection', { startSeconds: args.startSeconds, endSeconds: args.endSeconds, trackType: args.trackType }, 20000);
+    }
+  },
+
+  {
+    name: 'lift_selection',
+    description: 'Xoá toàn bộ clip nằm trong khoảng thời gian chỉ định nhưng GIỮ NGUYÊN khoảng trống (không ripple) — tương đương "Lift" trong Premiere.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        startSeconds: { type: 'number', description: 'Bắt đầu khoảng cần xoá (giây).' },
+        endSeconds: { type: 'number', description: 'Kết thúc khoảng cần xoá (giây).' },
+        trackType: { type: 'string', enum: ['video', 'audio', 'all'], description: 'Mặc định "all".' }
+      },
+      required: ['startSeconds', 'endSeconds']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('lift_selection', { startSeconds: args.startSeconds, endSeconds: args.endSeconds, trackType: args.trackType }, 20000);
+    }
   }
 ];

@@ -208,7 +208,11 @@ function _sendReadyMessage() {
                    "get_sequence_settings", "set_sequence_frame_rate",
                    "insert_mogrt_caption", "srt_to_mogrt_captions",
                    "add_marker", "remove_marker", "update_marker",
-                   "generate_and_import_srt", "import_transcript_json"]
+                   "generate_and_import_srt", "import_transcript_json",
+                   // MỚI 2026-09-14 — Motion/Transform + xoá theo lựa chọn/khoảng thời gian
+                   "set_clip_position", "set_clip_anchor_point", "set_clip_scale", "set_clip_rotation",
+                   "set_clip_opacity", "get_clip_transform",
+                   "remove_selected_clips", "extract_selection", "lift_selection"]
   }));
 }
 
@@ -363,6 +367,19 @@ async function _dispatchCommand(msg) {
 
       // Group 19: THỬ NGHIỆM — chưa test trên Premiere thật (2026-09-09)
       case "import_transcript_json": result = await importTranscriptJson(params, bLog);            break;
+
+      // Group 20: Motion/Transform (2026-09-14)
+      case "set_clip_position":      result = await setClipPosition(params, bLog);                 break;
+      case "set_clip_anchor_point":  result = await setClipAnchorPoint(params, bLog);               break;
+      case "set_clip_scale":         result = await setClipScale(params, bLog);                    break;
+      case "set_clip_rotation":      result = await setClipRotation(params, bLog);                 break;
+      case "set_clip_opacity":       result = await setClipOpacity(params, bLog);                  break;
+      case "get_clip_transform":     result = await getClipTransform(params, bLog);                break;
+
+      // Group 21: Xoá theo lựa chọn/khoảng thời gian (2026-09-14)
+      case "remove_selected_clips":  result = await removeSelectedClips(params, bLog);             break;
+      case "extract_selection":      result = await extractSelection(params, bLog);                break;
+      case "lift_selection":         result = await liftSelection(params, bLog);                   break;
 
       default:
         throw new Error("Tool không được hỗ trợ: " + tool + ". Dùng get_beat_styles để xem danh sách.");
