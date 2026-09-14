@@ -2,7 +2,11 @@
 
 Cập nhật lần cuối: 2026-09-14. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
-## 🔨 `rename_clip`/`enable_disable_clip` mới — ĐÃ CODE (API xác nhận qua probe trực tiếp), CHỜ RESTART ĐỂ LIVE-TEST (2026-09-14)
+## ✅ `rename_clip`/`enable_disable_clip` — ĐÃ LIVE-TEST ĐÚNG, KHÔNG BUG (2026-09-14)
+
+Live-test trên sequence test riêng (tạo mới, xác nhận qua `get_status` trước khi ghi — áp dụng bài học từ sự cố trước). `rename_clip("Test Clip Renamed")` → `actualName` khớp đúng. `enable_disable_clip(false)` → `actualEnabled:false`; bật lại `enable_disable_clip(true)` → `actualEnabled:true`. Cả 2 tool đúng ngay từ lần code đầu (nhờ probe API trước khi viết thay vì đoán) — không cần fix gì thêm.
+
+## Chi tiết batch `rename_clip`/`enable_disable_clip` (đã live-test xong, xem mục ✅ phía trên)
 
 Tiếp tục nhóm 8 (Editing precision) từ `AUDIT_MASTER_TOOL_LIST.md`. Trước khi code, đã probe trực tiếp prototype `TrackItem` thật (tạm dùng `get_clip_transform` đã có sẵn để chèn debug, không cần restart) — xác nhận:
 - `getName()`/`createSetNameAction()` → `rename_clip` khả thi (đổi tên TRACK ITEM trên timeline, khác tên project item gốc).
