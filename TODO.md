@@ -2,6 +2,20 @@
 
 Cập nhật lần cuối: 2026-09-14. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
+## 🔨 `rename_clip`/`enable_disable_clip` mới — ĐÃ CODE (API xác nhận qua probe trực tiếp), CHỜ RESTART ĐỂ LIVE-TEST (2026-09-14)
+
+Tiếp tục nhóm 8 (Editing precision) từ `AUDIT_MASTER_TOOL_LIST.md`. Trước khi code, đã probe trực tiếp prototype `TrackItem` thật (tạm dùng `get_clip_transform` đã có sẵn để chèn debug, không cần restart) — xác nhận:
+- `getName()`/`createSetNameAction()` → `rename_clip` khả thi (đổi tên TRACK ITEM trên timeline, khác tên project item gốc).
+- `isDisabled()`/`createSetDisabledAction()` → `enable_disable_clip` khả thi.
+- **Xác nhận KHÔNG có** API move-to-track hay link/unlink audio+video trên TrackItem — `move_clip_to_track`/`link_selection`/`unlink_selection` KHÔNG khả thi qua UXP (giống pattern track add/delete/lock đã biết từ trước), loại khỏi danh sách, không code.
+- Phát hiện thêm (chưa dùng): `createAddVideoTransitionAction`/`createRemoveVideoTransitionAction` — có thể dùng cho `remove_transition` (nhóm 12) nếu làm tiếp.
+
+**Cần restart app Claude** để nạp schema mới ở `server/src/tools/premiere-tools.js`.
+
+### ⚠️ Sự cố nhỏ trong lúc test đợt trước (đã xử lý, ghi lại làm bài học)
+
+Lúc probe API cho batch này, do quên tạo lại sequence test sau khi xoá sequence cũ, 1 lệnh `insert_clip` đã lỡ chạy vào sequence **"VN - WAG - BOOYAH-"** (data test tên thật, đã được user xác nhận an toàn để test) thay vì sequence test riêng — đẩy lùi nội dung ~10s. User xác nhận không cần khôi phục chính xác (không quan trọng), nhưng đã dọn tạm bằng `extract_selection` — kết quả dọn không khớp hoàn toàn 100% với nguyên trạng ban đầu (Video 1 còn 42 clip thay vì 44 gốc, do khoảng xoá vô tình trúng thêm vài clip gốc rất ngắn nằm trong đúng vùng thời gian đó). Không ảnh hưởng gì (user xác nhận), nhưng rút kinh nghiệm: **LUÔN xác nhận sequence active đúng là sequence test (qua `get_status`) trước MỌI lệnh ghi**, đặc biệt sau khi vừa `delete_sequence` (active sequence tự rơi về sequence khác).
+
 ## ✅ Batch tool mới đợt 2 — ĐÃ LIVE-TEST ĐẦY ĐỦ 9/9, 2 BUG FIX MỚI (2026-09-14)
 
 Live-test sau khi user restart app Claude, trên sequence test riêng (`MCP Transform Test`/`MCP RemoveSel Test`, đã xoá sau khi xong) với clip video thật.

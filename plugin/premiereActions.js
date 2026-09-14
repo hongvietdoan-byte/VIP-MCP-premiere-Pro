@@ -1970,6 +1970,8 @@ async function setClipOpacity({ percent }, log) {
 
 async function getClipTransform(_params, log) {
   const { sequence, clip } = await getActiveSequenceAndSelection(log);
+
+
   const atTick = await clip.getInPoint();
   const out = {};
   const { width, height } = await getFrameDimensions(sequence, log);
@@ -2077,6 +2079,42 @@ async function _removeItemsInTimeRange({ startSeconds, endSeconds, trackType = "
   }
 
   return { removed: deleted > 0, deleted, startSeconds, endSeconds, ripple };
+}
+
+// ============================================================================
+// GROUP — rename_clip / enable_disable_clip (2026-09-14) — API xác nhận thật qua probe trực tiếp
+// prototype TrackItem (không đoán): getName()/createSetNameAction() cho rename, isDisabled()/
+// createSetDisabledAction() cho enable/disable. LƯU Ý: rename_clip đổi tên TRACK ITEM (hiển thị trên
+// timeline), KHÔNG đổi tên project item gốc trong Project panel (2 khái niệm khác nhau trong
+// Premiere — đổi tên track item không ảnh hưởng các instance khác của cùng project item).
+// ============================================================================
+
+async function renameClip({ newName }, log) {
+  if (!newName) throw new Error("Phải truyền newName.");
+  const { project, clip } = await getActiveSequenceAndSelection(log);
+
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(clip.createSetNameAction(newName));
+    }, "Đổi tên clip qua MCP");
+  });
+
+  const actualName = await clip.getName();
+  return { renamed: true, newName, actualName };
+}
+
+async function enableDisableClip({ enabled }, log) {
+  if (enabled == null) throw new Error("Phải truyền enabled (true/false).");
+  const { project, clip } = await getActiveSequenceAndSelection(log);
+
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(clip.createSetDisabledAction(!enabled));
+    }, "Bật/tắt clip qua MCP");
+  });
+
+  const actualDisabled = await clip.isDisabled();
+  return { enabled, actualEnabled: !actualDisabled };
 }
 
 async function extractSelection({ startSeconds, endSeconds, trackType = "all" }, log) {

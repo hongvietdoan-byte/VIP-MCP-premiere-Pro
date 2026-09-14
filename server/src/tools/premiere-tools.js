@@ -1780,5 +1780,38 @@ export const PREMIERE_TOOLS = [
     execute(wsBridge, args) {
       return wsBridge.sendCommand('lift_selection', { startSeconds: args.startSeconds, endSeconds: args.endSeconds, trackType: args.trackType }, 20000);
     }
+  },
+
+  // ==========================================================================
+  // GROUP 22 — Rename/Enable-Disable clip (2026-09-14)
+  // ==========================================================================
+  {
+    name: 'rename_clip',
+    description: 'Đổi tên clip TRÊN TIMELINE (track item, hiển thị trên clip label) — khác tên project item gốc trong Project panel, không ảnh hưởng các instance khác của cùng media.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        newName: { type: 'string', description: 'Tên mới cho clip trên timeline.' }
+      },
+      required: ['newName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('rename_clip', { newName: args.newName }, 15000);
+    }
+  },
+
+  {
+    name: 'enable_disable_clip',
+    description: 'Bật/tắt clip đang chọn trên timeline (Enable trong Premiere) — clip bị tắt vẫn còn trên timeline nhưng không hiển thị/phát, khác xoá hẳn.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        enabled: { type: 'boolean', description: 'true = bật (hiển thị bình thường), false = tắt (ẩn khỏi playback).' }
+      },
+      required: ['enabled']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('enable_disable_clip', { enabled: args.enabled }, 15000);
+    }
   }
 ];
