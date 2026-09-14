@@ -2447,13 +2447,13 @@ async function setClipPan({ panValue }, log) {
   if (!comp) {
     // Clip audio KHÔNG mặc định có Panner/Balance intrinsic (khác Volume — phát hiện 2026-09-14: clip
     // stereo chỉ có sẵn "Internal Volume Stereo"/"Internal Channel Volume Stereo", không có Balance).
-    // Phải tự thêm effect "Balance" — nhưng AudioFilterFactory không có createComponent(matchName) như
-    // VideoFilterFactory, phải qua createComponentByDisplayName(displayName) (đã ghi chú sẵn ở
-    // getInstalledEffectsViaFactory phía trên; chữ ký đúng xác nhận 2026-09-14: chỉ nhận 1 tham số
-    // string displayName, không cần truyền clip).
+    // Phải tự thêm effect "Balance" qua AudioFilterFactory.createComponentByDisplayName(displayName,
+    // clip) — CHỮ KÝ ĐÚNG xác nhận 2026-09-14 qua debug step-by-step: cần **2 tham số**
+    // (displayName, clip), KHÔNG PHẢI chỉ 1 tham số string như nhận định sai lúc đầu (lần đầu tưởng
+    // đúng vì code thử nhiều biến thể và không log rõ cái nào thật sự thành công).
     const af = ppro.AudioFilterFactory;
     if (af && typeof af.createComponentByDisplayName === "function") {
-      const newComp = await af.createComponentByDisplayName("Balance");
+      const newComp = await af.createComponentByDisplayName("Balance", clip);
       if (newComp) {
         const chain = await clip.getComponentChain();
         await project.lockedAccess(() => {
@@ -2470,20 +2470,17 @@ async function setClipPan({ panValue }, log) {
   const param = await findParamByName(comp, "Balance") || await findParamByName(comp, "Pan");
   if (!param) throw new Error("Không tìm thấy param pan/balance.");
 
-  // QUAN TRỌNG (phát hiện 2026-09-14, live-test): param "Balance" thật của Premiere dùng thang
-  // -1.0 (trái hết) .. +1.0 (phải hết), KHÔNG PHẢI -100..100 như input của tool này. Set thẳng giá
-  // trị -50 (ngoài range) khiến Premiere ÂM THẦM bỏ qua write — không throw lỗi, executeTransaction
-  // vẫn trả true, nhưng đọc lại vẫn là giá trị mặc định cũ (0). Phải quy đổi /100 trước khi ghi,
-  // *100 lúc đọc lại để trả đúng đơn vị -100..100 cho người gọi tool.
-  // ⚠️ CHƯA GIẢI QUYẾT ĐƯỢC (2026-09-14, đã điều tra sâu — xem TODO.md): set giá trị lên param
-  // "Balance" của component "Balance" (thêm mới qua AudioFilterFactory.createComponentByDisplayName)
-  // KHÔNG có tác dụng — đã thử 4 biến thể (giá trị -50/-0.5, tại clip.getInPoint()/tick 0, có/không
-  // bật time-varying) và TẤT CẢ đều đọc lại ra 0 dù `getKeyframeListAsTickTimes()` xác nhận có 1
-  // keyframe được tạo (chỉ là keyframe đó tự mang giá trị 0, không phải giá trị đã gửi). Nghi ngờ
-  // component audio filter mới thêm qua đường này không nhận write bằng pattern
-  // createKeyframe/createAddKeyframeAction giống component video — cần điều tra thêm (có thể phải
-  // dùng API khác dành riêng cho audio param, hoặc component cần "khởi tạo" theo cách khác trước khi
-  // ghi được). Tạm thời set_clip_pan KHÔNG dùng được — báo lỗi rõ thay vì báo thành công giả.
+  // ⚠️ CHƯA GIẢI QUYẾT ĐƯỢC (2026-09-14, đã điều tra rất sâu — xem TODO.md mục set_clip_pan).
+  // Component "Balance" thêm đúng cách (xác nhận qua createComponentByDisplayName("Balance", clip) —
+  // 2 tham số, không phải 1), nhưng GHI GIÁ TRỊ vào param "Balance" của nó hoàn toàn không có tác
+  // dụng — đã thử ĐỦ CÁC ĐƯỜNG: keyframe qua createAddKeyframeAction (combine 1 transaction, tách 2
+  // transaction, có/không bật time-varying trước), và cả `createSetValueAction` với 3 kiểu tham số
+  // (Keyframe object — không lỗi nhưng vẫn không set; raw number/string/object — "Illegal Parameter
+  // type"). Đọc lại RAW (không qua unwrap) xác nhận value thật sự là {value:0}, không phải bug đọc.
+  // Nghi ngờ: component audio filter thêm qua AudioFilterFactory không được Premiere "kích hoạt" đầy
+  // đủ trong audio engine dù mọi API tạo/thêm/ghi đều không báo lỗi — có thể cần thao tác khác hẳn
+  // (vd qua UI thật, hoặc effect cần gắn vào 1 loại track/clip khác). Báo lỗi rõ thay vì báo thành
+  // công giả.
   const atTick = await clip.getInPoint();
   await project.lockedAccess(() => {
     project.executeTransaction((compoundAction) => {
@@ -2497,7 +2494,7 @@ async function setClipPan({ panValue }, log) {
   if (Math.abs((actualPanValue ?? 0) - panValue) > 1) {
     throw new Error(
       `set_clip_pan hiện KHÔNG hoạt động: gửi panValue=${panValue} nhưng đọc lại param "Balance" vẫn là ${actualPanValue} ` +
-      `(component audio filter mới thêm qua AudioFilterFactory không nhận write theo pattern keyframe thông thường — cần điều tra thêm, xem TODO.md).`
+      `(đã điều tra sâu 2026-09-14, xem TODO.md — component tạo đúng nhưng ghi giá trị không có tác dụng qua bất kỳ API nào đã thử).`
     );
   }
 

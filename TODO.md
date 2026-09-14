@@ -331,7 +331,18 @@ Live-test trên sequence tạm `MCP Batch Test 2026-09-14` (đã xoá sau khi xo
 
 ### 🔴 Bug mới CHƯA FIX (đã điều tra sâu, để lại cho phiên sau)
 
-**`set_clip_pan`** — clip audio stereo không có sẵn component Panner/Balance (chỉ có "Internal Volume Stereo"/"Internal Channel Volume Stereo"). Đã sửa để tự thêm effect "Balance" qua `AudioFilterFactory.createComponentByDisplayName("Balance")` (xác nhận chữ ký đúng, chỉ nhận 1 tham số string) — effect được thêm thành công thật (verify qua `get_clip_effects`-style dump: có component "Balance" với param con "Balance" hiển thị đúng). NHƯNG **ghi giá trị vào param "Balance" của component mới thêm này hoàn toàn không có tác dụng** — đã thử 4 biến thể (giá trị -50%/-0.5 chuẩn hoá, tại `clip.getInPoint()`/tick 0, có/không bật `createSetTimeVaryingAction`) — tất cả đều đọc lại ra 0, dù `getKeyframeListAsTickTimes()` xác nhận CÓ 1 keyframe được tạo (chỉ là bản thân keyframe đó mang giá trị 0, không phải giá trị đã gửi). Nghi ngờ component audio filter thêm mới qua `AudioFilterFactory` không nhận write theo pattern `createKeyframe`/`createAddKeyframeAction` giống component video — cần điều tra thêm (có thể cần API set value khác dành riêng cho audio, hoặc effect cần "khởi tạo" theo cách khác). Code hiện tại throw lỗi rõ ràng thay vì báo thành công giả.
+**`set_clip_pan`** — clip audio stereo không có sẵn component Panner/Balance (chỉ có "Internal Volume Stereo"/"Internal Channel Volume Stereo"). Đã sửa để tự thêm effect "Balance" qua `AudioFilterFactory.createComponentByDisplayName(displayName, clip)`.
+
+**Điều tra vòng 2 (2026-09-14, sau khi commit lần đầu)** — đào sâu thêm bằng debug step-by-step:
+- Phát hiện + sửa thêm 1 bug con: chữ ký đúng của `createComponentByDisplayName` là **2 tham số** `("Balance", clip)`, KHÔNG PHẢI 1 tham số như ghi nhận lần đầu (lần đầu code thử nhiều biến thể trong vòng lặp và không log rõ biến thể nào thật sự thành công — kết luận vội).
+- Với chữ ký đúng, effect "Balance" giờ chắc chắn được thêm thành công (verify từng bước: `append transaction: "ok"`, `re-find Balance after append: true`, `findParamByName: true`).
+- NHƯNG việc GHI GIÁ TRỊ vào param "Balance" vẫn hoàn toàn không có tác dụng, đã thử THÊM 3 đường nữa (tổng cộng 7+ biến thể qua 2 vòng điều tra):
+  - Tách `createSetTimeVaryingAction` và `setStaticKeyframe`/`createAddKeyframeAction` thành 2 transaction riêng (thay vì gộp chung) — vẫn đọc lại 0.
+  - `createSetValueAction(rawNumber)` — lỗi "Illegal Parameter type".
+  - `createSetValueAction(keyframeObject)` (tạo qua `param.createKeyframe(value)`) — **không lỗi**, nhưng đọc lại vẫn 0.
+  - `createSetValueAction({value: x})` / `createSetValueAction(string)` — lỗi "Illegal Parameter type".
+  - Đọc RAW giá trị (không qua hàm `unwrapParamValue`) xác nhận thật sự là `{value: 0}` — loại trừ khả năng bug nằm ở code đọc/unwrap, giá trị thật sự không đổi.
+- **Kết luận cuối cùng**: đây là giới hạn thật (component audio filter thêm qua `AudioFilterFactory.createComponentByDisplayName` có vẻ không được Premiere "kích hoạt" đầy đủ trong audio engine dù MỌI API tạo/thêm/ghi đều không báo lỗi) — không phải do chưa tìm đúng API. Code hiện throw lỗi rõ ràng thay vì báo thành công giả. Nếu cần dùng, làm tay: chuột phải clip → Audio Gain, hoặc kéo Balance từ Effects panel + chỉnh tay trong Effect Controls.
 
 ### ✅ Xác nhận hoạt động đúng (không cần sửa)
 
