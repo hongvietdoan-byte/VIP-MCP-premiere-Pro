@@ -1,0 +1,263 @@
+STT,Nhóm,Tool (tên MCP),Trạng thái,Ghi chú,Ngày test cuối
+1,Kết nối & Trạng thái,ping,✅,"WS round-trip test, dùng liên tục suốt dự án, ổn định",2026-09-10
+2,Kết nối & Trạng thái,get_status,✅,Compound status. Đã fix bug báo sai frameRate=25 cứng,2026-09-14
+3,Kết nối & Trạng thái,get_plugin_status,✅,Dùng nội bộ bởi get_status, hoạt động ổn định,2026-09-10
+4,Project & File,get_project_info,✅,Đọc project/sequence/bin đúng. Bins list dùng getItems() - đã sửa nhưng chưa live-test riêng nếu có bin lồng nhau,2026-09-14
+5,Project & File,import_files,✅,"Live-tested nhiều lần (Mic Check 64 ảnh, icon.png test)",2026-09-14
+6,Project & File,open_project,⏳ Waiting...,"KHÔNG phải stub thật (khác add_text_overlay) - có gọi API thật ppro.Project.openDocument(), chỉ là chưa bao giờ live-test trên máy thật. TODO gốc 2026-09-10 xếp nhầm chung nhóm ""stub"" với add_text_overlay",-
+7,Project & File,create_bin,✅,Fix createBinAction 2026-09-10 - live-tested,2026-09-10
+8,Project & File,move_item_to_bin,✅,"FIX 2026-09-14 nhờ audit sample Adobe chính thức: createMoveItemAction(itemToMove, destFolderCast) cần 2 tham số (gọi trên rootItem), code cũ chỉ truyền 1. Live-tested",2026-09-14
+9,Sequence,create_sequence,✅,"Viết lại 2026-09-10, live-tested 60fps/23.976fps/custom size",2026-09-10
+10,Sequence,delete_sequence,✅,"Live-tested, verify read-back",2026-09-10
+11,Sequence,duplicate_sequence,✅,Xác nhận hoạt động đúng,2026-09-09
+12,Sequence,set_active_sequence,✅,Xác nhận hoạt động đúng,2026-09-09
+13,Sequence,get_sequence_info,✅,"FIX 2026-09-14: hết báo sai frameRate=25 cứng, dùng getVideoFrameRate() thật + fallback timebase",2026-09-14
+14,Sequence,get_sequence_settings,✅,"Live-tested đầy đủ, chỉ hoạt động từ Premiere 26.2+",2026-09-10
+15,Sequence,set_sequence_frame_rate,✅,Live-tested 60↔23.976fps. Còn thiếu test 24/25/29.97/30/50/59.94,2026-09-10
+16,Clip Editing,insert_clip,✅,"Fix vị trí + duration 2026-09-10, live-tested nhiều lần",2026-09-10
+17,Clip Editing,overwrite_clip,✅,"Cùng fix với insert_clip, live-tested + idempotent (gọi lại 2-3 lần vẫn đúng)",2026-09-10
+18,Clip Editing,batch_place_clips,✅,"Dùng trong Mic Check workflow, live-tested 64/64 ảnh đặt đúng",2026-09-10
+19,Clip Editing,move_clip,✅,"Unblock + live-tested lần đầu, sau khi fix select_all_clips",2026-09-14
+20,Clip Editing,trim_clip,✅,"FIX 2026-09-14: đổi sang createSetStartAction/createSetEndAction - code cũ dùng nhầm source-trim API gây crash native ""nullptr""",2026-09-14
+21,Clip Editing,cut_clip_at_time,⏳ Waiting...,"Chưa test - cần QE DOM. Audit 2026-09-14 cross-check: cả 2 repo UXP-first (nepfaff, CaYatur) đều không né được QE DOM cho thao tác cắt/trim nâng cao - QE DOM legacy nhưng vẫn hoạt động, không phải bug của mình, chấp nhận dùng tiếp",-
+22,Clip Editing,delete_clip,✅,"FIX 2026-09-14 nhờ audit sample Adobe chính thức: createRemoveItemsAction(selection, ripple, mediaType) cần 3 tham số - thiếu MediaType (thứ 3) là lý do 9 lần thử trước đều sai. Live-tested xoá thường + ripple",2026-09-14
+23,Clip Editing,ripple_delete,✅,Cùng fix với delete_clip. Live-tested: clip sau tự dịch trái đúng khi ripple,2026-09-14
+24,Clip Editing,duplicate_clip,✅,"FIX 2026-09-14: sửa originalStart tính sai (getInPoint→getStartTime). LƯU Ý: offsetSeconds < duration clip gốc sẽ cắt vỡ clip gốc thành nhiều mảnh (hành vi native, không phải bug)",2026-09-14
+25,Selection,select_all_clips,✅,"FIX LẦN 2 2026-09-14: setSelection() cần object TrackItemSelection (lấy qua getSelection()+addItem), không phải mảng thô như fix lần 1 (09-10) tưởng đúng",2026-09-14
+26,Selection,select_clips_in_range,✅,Cùng fix với select_all_clips - live-tested đúng theo range,2026-09-14
+27,Selection,deselect_all_clips,✅,"Live-tested, dùng sequence.clearSelection() trực tiếp (bỏ nhánh createSelectItemsAction chết)",2026-09-14
+28,Selection,get_selected_clips,✅,Dùng xác nhận độc lập suốt session - ổn định,2026-09-14
+29,Audio,detect_silence_regions,⏳ Waiting...,Chưa test,-
+30,Audio,remove_silence_gaps,⏳ Waiting...,Chưa test,-
+31,Audio,set_clip_volume,⏳ Waiting...,Chưa test,-
+32,Audio,set_clip_pan,⏳ Waiting...,Chưa test,-
+33,Audio,mute_track,✅,"FIX 2026-09-14: track.createSetMuteAction() KHÔNG tồn tại (chưa từng live-test trước đây) - sửa track.setMute() gọi trực tiếp. Live-tested: mute→true, unmute→false, cả 2 verify đúng qua actualMuted",2026-09-14
+34,Audio,setup_audio_ducking,⏳ Waiting...,Chưa test,-
+35,Effects,search_effects,⏳ Waiting...,Chưa test qua tool (nhưng debug_probe_api xác nhận DB 200 effect đọc được),-
+36,Effects,apply_effect,⏳ Waiting...,Chưa test,-
+37,Effects,get_clip_effects,⏳ Waiting...,Chưa test,-
+38,Effects,set_effect_param,⏳ Waiting...,Chưa test,-
+39,Effects,remove_effect,⏳ Waiting...,Chưa test,-
+40,Transitions,list_available_transitions,⏳ Waiting...,Chưa test,-
+41,Transitions,add_transition,⏳ Waiting...,Chưa test,-
+42,Transitions,batch_add_transitions,⏳ Waiting...,Chưa test,-
+43,Color,apply_lumetri_preset,⏳ Waiting...,Chưa test,-
+44,Color,set_clip_color_label,⏳ Waiting...,Chưa test,-
+45,Color,adjust_color_values,⏳ Waiting...,Chưa test,-
+46,Caption/Subtitle,create_caption_track,◐ Nghi hỏng,"Chưa test trực tiếp tool này. Sequence.createCaptionTrack đã xác nhận KHÔNG tồn tại trong UXP - audit 2026-09-14 cross-check thêm với sample Transcript chính thức Adobe (chỉ có import/export JSON, không có API tạo Caption Track) + cả 4 repo cộng đồng còn lại claim làm được đều dùng CEP/ExtendScript - xác nhận GIỚI HẠN THẬT của hệ sinh thái, không phải do thiếu tìm",2026-09-14
+47,Caption/Subtitle,import_srt,⏳ Waiting...,"Import file SRT vào Project panel (khác với tạo caption track) - chưa test tool riêng, nhưng import_files pattern tương tự đã ổn",-
+48,Caption/Subtitle,read_sequence_captions,⏳ Waiting...,Chưa test,-
+49,Caption/Subtitle,insert_mogrt_caption,◐ Một phần,"Vị trí/thời lượng ĐÚNG (live-tested), nhưng set TEXT không được - component Graphic Group không có API drill xuống text layer con. Audit 2026-09-14 cross-check: sample effects.ts Adobe official cũng chỉ dùng getComponentChain() để thêm/xoá component, không đọc/ghi param; cả 5 repo cộng đồng không repo nào cite được API text thật (CaYatur tự đánh dấu tool tương tự của họ là ""possibly broken"") - xác nhận GIỚI HẠN THẬT của cả hệ sinh thái UXP",2026-09-14
+50,Caption/Subtitle,srt_to_mogrt_captions,◐ Một phần,Cùng giới hạn với insert_mogrt_caption - vị trí đúng nhưng text không set được (xem cross-check chi tiết ở dòng insert_mogrt_caption),2026-09-14
+51,Caption/Subtitle,generate_and_import_srt,⏳ Waiting...,Chưa test,-
+52,Caption/Subtitle,import_transcript_json,⏳ Waiting...,"Chưa test (đánh dấu ""thử nghiệm"" trong TODO gốc)",-
+53,Caption/Subtitle,transcribe_clip,⏳ Waiting...,Chưa test,-
+54,Caption/Subtitle,auto_caption_from_speech,⏳ Waiting...,Chưa test,-
+55,Speed/Time,set_clip_speed,⏳ Waiting...,Chưa test,-
+56,Speed/Time,reverse_clip,⏳ Waiting...,Chưa test,-
+57,Speed/Time,freeze_frame,⏳ Waiting...,Chưa test,-
+58,Media Management,replace_clip_media,⏳ Waiting...,Chưa test,-
+59,Media Management,relink_offline_media,⏳ Waiting...,"Đọc code: hiện chỉ trả message hướng dẫn thủ công, chưa tự relink thật - nghi ngờ là stub",-
+60,Metadata & Scene,detect_scene_edits,⏳ Waiting...,Chưa test,-
+61,Metadata & Scene,get_clip_metadata,✅,"FIX 2026-09-14: API ở namespace tĩnh ppro.Metadata.getXMPMetadata(), không phải trên ProjectItem. Sửa thêm parse Language-Alternative (rdf:Alt/rdf:li) cho field dc:description. Live-tested",2026-09-14
+62,Metadata & Scene,set_clip_metadata,✅,FIX 2026-09-14: ppro.Metadata.createSetXMPMetadataAction(). Sửa thêm bug phụ: field ghi thiếu khai báo xmlns:dc bị Premiere âm thầm bỏ qua - tạo rdf:Description riêng có khai báo dc. Live-tested,2026-09-14
+63,MOGRT & Overlay,import_mogrt,⏳ Waiting...,Chưa test,-
+64,MOGRT & Overlay,add_text_overlay,⛔ Stub,"Stub THẬT: code luôn trả cứng added:false + câu nhắc làm tay, KHÔNG gọi API Premiere nào bất kể input - không cần test",-
+65,Export & Capture,capture_frame,⏳ Waiting...,Chưa test,-
+66,Export & Capture,export_as_xml,⏳ Waiting...,Chưa test,-
+67,Export & Capture,export_to_media_encoder,⏳ Waiting...,Chưa test,-
+68,Marker,add_marker,⏳ Waiting...,Chưa test qua tool MCP (marker dùng nhiều bên dự án Beat Shake khác - chưa xác nhận riêng cho premiere-mcp),-
+69,Marker,remove_marker,⏳ Waiting...,Chưa test,-
+70,Marker,update_marker,⏳ Waiting...,Chưa test,-
+71,Debug/Chẩn đoán,debug_probe_api,✅,"Live-tested 2026-09-14 - chỉ đọc, an toàn, trả về đúng thông tin API/effect",2026-09-14
+72,Debug/Chẩn đoán,debug_inspect_chain,⏳ Waiting...,Chưa test,-
+73,Debug/Chẩn đoán,debug_get_element,⏳ Waiting...,Chưa test (dùng để debug CSS panel UI),-
+74,Debug/Chẩn đoán,debug_list_markers,⏳ Waiting...,Chưa test,-
+"DE XUAT THEM MOI - audit sau 2026-09-14, 187 capability tu 4 repo (source code that, xem AUDIT_MASTER_TOOL_LIST.md)",,,,,
+75,Keyframe,`add_keyframe`,✅,"KHÔNG cần tool riêng - dùng qua set_effect_param(...,timeSeconds). FIX 2026-09-14: thiếu bật createSetTimeVaryingAction(true) trước add keyframe - trước fix chỉ ghi đè giá trị tĩnh. Live-tested sau fix: keyframe thật, nội suy đúng",2026-09-14
+76,Keyframe,`remove_keyframe`,✅,"FIX 2026-09-14: createRemoveKeyframeRangeAction đòi start<stop nghiêm ngặt, truyền cùng 1 tick lỗi native. Fix pad ±1ms. Live-tested",2026-09-14
+77,Keyframe,`remove_keyframe_range`,✅,"Live-tested: xoá đúng 1/2 keyframe trong khoảng, giữ nguyên keyframe ngoài khoảng",2026-09-14
+78,Keyframe,`get_keyframes`,✅,Live-tested sau fix add_keyframe: trả đúng count + timeSeconds/value từng keyframe,2026-09-14
+79,Keyframe,`get_value_at_time`,✅,Live-tested: nội suy linear đúng giữa 2 keyframe (vd 10→50 tại điểm giữa ra 30),2026-09-14
+80,Keyframe,`set_keyframe_interpolation`,✅,Live-tested: mode hold giữ nguyên giá trị đúng như kỳ vọng (không nội suy),2026-09-14
+81,Keyframe,`add_audio_keyframes`,✅,"KHÔNG cần tool riêng - dùng chung get/remove/set_keyframe_interpolation generic (param Level của Volume)",-
+82,Track management (chỉ có mute_track hiện tại),"`add_track` / `add_tracks` (đơn/hàng loạt) [hetpatel, leancoderkavy, antipaster]",❌ Không thể,XÁC NHẬN 2026-09-14: probe trực tiếp prototype Sequence/Track/SequenceEditor - KHÔNG có API add/delete/lock/toggle-visibility/set-target track qua UXP. Track chỉ có createSetNameAction/setMute/getIndex/isMuted/getTrackItems (thuần đọc + rename + mute),-
+83,Track management (chỉ có mute_track hiện tại),`delete_track` / `remove_track` [cả 3 repo],❌ Không thể,XÁC NHẬN 2026-09-14: probe trực tiếp prototype Sequence/Track/SequenceEditor - KHÔNG có API add/delete/lock/toggle-visibility/set-target track qua UXP. Track chỉ có createSetNameAction/setMute/getIndex/isMuted/getTrackItems (thuần đọc + rename + mute),-
+84,Track management (chỉ có mute_track hiện tại),`lock_track`,❌ Không thể,XÁC NHẬN 2026-09-14: probe trực tiếp prototype Sequence/Track/SequenceEditor - KHÔNG có API add/delete/lock/toggle-visibility/set-target track qua UXP. Track chỉ có createSetNameAction/setMute/getIndex/isMuted/getTrackItems (thuần đọc + rename + mute),-
+85,Track management,rename_track,✅,Live-tested: đổi tên track đúng verify qua actualName,2026-09-14
+86,Track management (chỉ có mute_track hiện tại),`toggle_track_visibility`,❌ Không thể,XÁC NHẬN 2026-09-14: probe trực tiếp prototype Sequence/Track/SequenceEditor - KHÔNG có API add/delete/lock/toggle-visibility/set-target track qua UXP. Track chỉ có createSetNameAction/setMute/getIndex/isMuted/getTrackItems (thuần đọc + rename + mute),-
+87,Track management,get_track_info,✅,Live-tested: đọc đúng tên/mute/clipCount 1 track,2026-09-14
+88,Track management,list_sequence_tracks,✅,Live-tested: liệt kê đúng toàn bộ video/audio track + clipCount,2026-09-14
+89,Track management (chỉ có mute_track hiện tại),`set_target_track` / `set_all_tracks_targeted` / `get_target_tracks`,❌ Không thể,XÁC NHẬN 2026-09-14: probe trực tiếp prototype Sequence/Track/SequenceEditor - KHÔNG có API add/delete/lock/toggle-visibility/set-target track qua UXP. Track chỉ có createSetNameAction/setMute/getIndex/isMuted/getTrackItems (thuần đọc + rename + mute),-
+90,Project lifecycle,save_project,✅,Live-tested nhiều lần suốt session - ổn định,2026-09-14
+91,Project lifecycle,save_project_as,✅,Live-tested: LƯU Ý project active chuyển hẳn sang file mới (như Premiere thật) không phải lưu bản sao,2026-09-14
+92,Project lifecycle (0 tool save hiện tại),`create_project`,🆕 Đề xuất,"tạo project mới từ đầu [hetpatel, leancoderkavy]",-
+93,Project lifecycle (0 tool save hiện tại),"`close_project` [leancoderkavy, antipaster]",🆕 Đề xuất,,-
+94,Project lifecycle (0 tool save hiện tại),`create_project_backup`,🆕 Đề xuất,backup có verify byte [leancoderkavy],-
+95,Project lifecycle (0 tool save hiện tại),`inspect_project_recovery`,🆕 Đề xuất,chẩn đoán auto-save recovery [leancoderkavy],-
+96,Project lifecycle (0 tool save hiện tại),`flush_cache`,🆕 Đề xuất,xoá media cache giải phóng ổ đĩa [antipaster],-
+97,Project lifecycle (0 tool save hiện tại),`get_workspaces` / `set_workspace`,🆕 Đề xuất,"quản lý layout [leancoderkavy, antipaster, hetpatel-expanded]",-
+98,Project lifecycle (0 tool save hiện tại),"`get_project_scratch_disks` / `set_project_scratch_disk` / `set_scratch_disk_path` [leancoderkavy, hetpatel-expanded]",🆕 Đề xuất,,-
+99,Project lifecycle (0 tool save hiện tại),`set_transcode_on_ingest` [leancoderkavy],🆕 Đề xuất,,-
+100,Project lifecycle (0 tool save hiện tại),`get_full_project_overview` / `get_premiere_state`,🆕 Đề xuất,"snapshot toàn bộ state 1 lần [leancoderkavy, hetpatel-expanded]",-
+101,Project lifecycle (0 tool save hiện tại),"`get_version_info` / `get_app_version` [leancoderkavy, antipaster]",🆕 Đề xuất,,-
+102,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),`create_smart_bin`,🆕 Đề xuất,bin tìm kiếm tự động [leancoderkavy],-
+103,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),"`delete_bin` / `rename_bin` [leancoderkavy, hetpatel-expanded]",🆕 Đề xuất,,-
+104,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),`get_bin_contents`,🆕 Đề xuất,nội dung 1 bin cụ thể [leancoderkavy],-
+105,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),`move_items_to_bin`,🆕 Đề xuất,di chuyển hàng loạt (khác move_item_to_bin đơn lẻ đã có) [leancoderkavy],-
+106,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),"`delete_project_item` / `delete_multiple_project_items` / `delete_project_items` [leancoderkavy, antipaster]",🆕 Đề xuất,,-
+107,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),"`rename_project_item` [hetpatel, leancoderkavy, antipaster]",🆕 Đề xuất,,-
+108,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),"`find_project_item_by_name` / `find_items_by_media_path` / `search_project_items` / `find_project_items` [leancoderkavy, hetpatel-expanded, antipaster]",🆕 Đề xuất,,-
+109,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),`get_project_item_info`,🆕 Đề xuất,"chi tiết đầy đủ 1 item [leancoderkavy, antipaster]",-
+110,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),`select_item`,🆕 Đề xuất,chọn item trong Project panel [leancoderkavy],-
+111,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),"`get_duplicate_media` / `consolidate_duplicates` [leancoderkavy, hetpatel]",🆕 Đề xuất,,-
+112,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),`get_unused_media` / `get_used_media_report`,🆕 Đề xuất,"audit media hàng loạt [leancoderkavy, hetpatel-expanded]",-
+113,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),`check_offline_media` / `get_offline_media`,🆕 Đề xuất,"khác `relink_offline_media` đơn lẻ đã có, đây là audit hàng loạt [leancoderkavy, hetpatel]",-
+114,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),`set_offline`,🆕 Đề xuất,"đưa item offline/online lại [leancoderkavy, hetpatel-expanded]",-
+115,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),`refresh_media`,🆕 Đề xuất,"reload media từ đĩa sau khi sửa [leancoderkavy, hetpatel, antipaster]",-
+116,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),`clear_item_in_out` / `set_item_in_out`,🆕 Đề xuất,in/out điểm nguồn của project item [leancoderkavy],-
+117,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),`set_start_time`,🆕 Đề xuất,"timecode offset của project item [leancoderkavy, hetpatel-expanded]",-
+118,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),`set_override_frame_rate` / `set_override_pixel_aspect_ratio`,🆕 Đề xuất,"override interpretation [leancoderkavy, antipaster, hetpatel-expanded]",-
+119,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),"`set_scale_to_frame_size` [leancoderkavy, antipaster, hetpatel-expanded]",🆕 Đề xuất,,-
+120,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),`set_poster_frame`,🆕 Đề xuất,"thumbnail đại diện [leancoderkavy, hetpatel-expanded]",-
+121,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),"`get_footage_interpretation` / `set_footage_interpretation` [leancoderkavy, hetpatel]",🆕 Đề xuất,,-
+122,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),"`get_color_space` / `get_clip_color_space` [leancoderkavy, antipaster]",🆕 Đề xuất,,-
+123,Bin & project item management (nâng cao hơn create_bin/move_item_to_bin hiện có),`create_subclip`,🆕 Đề xuất,"từ project item với in/out [leancoderkavy, hetpatel, antipaster — xác nhận cả 3]",-
+124,Import / media nâng cao,`import_folder`,🆕 Đề xuất,"import cả thư mục [leancoderkavy, hetpatel]",-
+125,Import / media nâng cao,`import_image_sequence`,🆕 Đề xuất,chuỗi ảnh đánh số thành 1 clip video [leancoderkavy],-
+126,Import / media nâng cao,`import_ae_comps`,🆕 Đề xuất,"import composition từ After Effects [leancoderkavy, antipaster]",-
+127,Import / media nâng cao,"`import_sequences` (từ project khác) [leancoderkavy, hetpatel, antipaster]",🆕 Đề xuất,,-
+128,Import / media nâng cao,"`create_bars_and_tone` / `add_bars_and_tone` [leancoderkavy, antipaster]",🆕 Đề xuất,,-
+129,Import / media nâng cao,`manage_media_watch`,🆕 Đề xuất,theo dõi thư mục media tự động import [leancoderkavy],-
+130,Import / media nâng cao,`set_zero_point`,🆕 Đề xuất,timecode bắt đầu của sequence [leancoderkavy],-
+131,Proxy workflow (0 tool hiện có),`manage_proxies` / `create_proxy` / `attach_proxy`,🆕 Đề xuất,"tạo và gắn proxy [leancoderkavy, antipaster]",-
+132,Proxy workflow (0 tool hiện có),`has_proxy`,🆕 Đề xuất,kiểm tra đã có proxy chưa [leancoderkavy],-
+133,Proxy workflow (0 tool hiện có),"`detach_proxy` [leancoderkavy, hetpatel-expanded]",🆕 Đề xuất,,-
+134,Proxy workflow (0 tool hiện có),`toggle_proxy_mode`,🆕 Đề xuất,bật/tắt proxy toàn cục [antipaster],-
+135,Sequence management nâng cao (ngoài create/delete/duplicate/settings đã có),`create_sequence_from_clips` / `create_sequence_from_clip`,🆕 Đề xuất,"tự đặt clip khi tạo [leancoderkavy, antipaster]",-
+136,Sequence management nâng cao (ngoài create/delete/duplicate/settings đã có),`create_sequence_from_preset`,🆕 Đề xuất,"từ file .sqpreset [leancoderkavy, hetpatel-expanded]",-
+137,Sequence management nâng cao (ngoài create/delete/duplicate/settings đã có),`close_sequence`,🆕 Đề xuất,đóng tab timeline [leancoderkavy],-
+138,Sequence management nâng cao (ngoài create/delete/duplicate/settings đã có),`get_sequence_count` [leancoderkavy],🆕 Đề xuất,,-
+139,Sequence management nâng cao (ngoài create/delete/duplicate/settings đã có),`get_full_sequence_info` / `get_sequence_structure`,🆕 Đề xuất,thông tin đầy đủ 1 sequence [leancoderkavy],-
+140,Sequence management nâng cao (ngoài create/delete/duplicate/settings đã có),"`set_sequence_resolution` / `set_sequence_pixel_aspect_ratio` / `set_sequence_field_type` / `set_sequence_display_format` / `set_sequence_audio_settings` [leancoderkavy, hetpatel-expanded]",🆕 Đề xuất,,-
+141,Sequence management nâng cao,get/set_sequence_in_out_points,✅,"Live-tested: set + partial-update (chỉ đổi in, giữ nguyên out) đều đúng. clear_sequence_in_out chưa làm riêng",2026-09-14
+142,Sequence management nâng cao (ngoài create/delete/duplicate/settings đã có),`get_work_area` / `set_work_area` / `is_work_area_enabled`,🆕 Đề xuất,"thanh work-area [leancoderkavy, hetpatel-expanded]",-
+143,Sequence management nâng cao (ngoài create/delete/duplicate/settings đã có),`create_subsequence`,🆕 Đề xuất,"từ in/out points [leancoderkavy, hetpatel, antipaster]",-
+144,Sequence management nâng cao (ngoài create/delete/duplicate/settings đã có),`unnest_sequence` / `nest_clips`,🆕 Đề xuất,"lồng/tách sub-sequence [leancoderkavy, hetpatel-expanded, antipaster]",-
+145,Sequence management nâng cao (ngoài create/delete/duplicate/settings đã có),`export_as_project`,🆕 Đề xuất,"xuất sequence thành .prproj riêng [leancoderkavy, hetpatel-expanded]",-
+146,Sequence management nâng cao (ngoài create/delete/duplicate/settings đã có),`diff_sequence_snapshots`,🆕 Đề xuất,so sánh trước/sau [leancoderkavy],-
+147,Sequence management nâng cao (ngoài create/delete/duplicate/settings đã có),`auto_reframe_sequence`,🆕 Đề xuất,"AI đổi tỷ lệ khung hình tự động [leancoderkavy, hetpatel, antipaster — xác nhận cả 3, giá trị cao]",-
+148,Sequence management nâng cao (ngoài create/delete/duplicate/settings đã có),`audit_timeline_health` / `inspect_edit_readiness` / `validate_project_for_export`,🆕 Đề xuất,"điểm sức khoẻ sequence trước bàn giao [leancoderkavy, hetpatel]",-
+149,Sequence management nâng cao (ngoài create/delete/duplicate/settings đã có),`get_graphics_white_luminance` / `set_graphics_white_luminance`,🆕 Đề xuất,HDR setting [leancoderkavy],-
+150,Editing precision,roll_edit,✅,Live-tested: dời điểm cắt 5s→6s ra đúng 0-6s/6-10s cho 2 clip liền kề,2026-09-14
+151,Editing precision,slip_edit,✅,"FIX 2026-09-14: createSetInPointAction/createSetOutPointAction âm thầm dịch cả vị trí timeline (bug xác nhận trên cả ảnh tĩnh lẫn video thật). Fix bù lại bằng createMoveAction. Live-tested",2026-09-14
+152,Editing precision,slide_edit,🆕 Đề xuất,Chưa làm - phức tạp hơn (cần điều chỉnh cả 2 clip liền kề),-
+153,Editing precision,extract_selection,✅,Live-tested: ripple đóng khoảng trống đúng (clip sau dịch về đúng vị trí),2026-09-14
+154,Editing precision,lift_selection,✅,Live-tested: giữ nguyên khoảng trống đúng như kỳ vọng,2026-09-14
+155,Editing precision,link_selection / unlink_selection,❌ Không thể,XÁC NHẬN 2026-09-14 qua probe trực tiếp prototype TrackItem: không có API link/unlink nào,-
+156,Editing precision (chỉ có ripple-style hiện tại qua trim_clip/ripple_delete),`get_clip_links` / `get_linked_items` [leancoderkavy],🆕 Đề xuất,,-
+157,Editing precision,remove_selected_clips,✅,"FIX 2026-09-14: getMediaType() trả object enum thật, so sánh === ""Audio"" (string) luôn sai. Fix dùng ppro.Constants.MediaType. Live-tested",2026-09-14
+158,Editing precision (chỉ có ripple-style hiện tại qua trim_clip/ripple_delete),`split_clip`,🆕 Đề xuất,cắt 1 track tại 1 thời điểm (khác razor_all_tracks) [hetpatel],-
+159,Editing precision (chỉ có ripple-style hiện tại qua trim_clip/ripple_delete),`razor_all_tracks` / `razor_timeline_at_time`,🆕 Đề xuất,"cắt xuyên toàn bộ track [leancoderkavy, hetpatel, antipaster]",-
+160,Editing precision (chỉ có ripple-style hiện tại qua trim_clip/ripple_delete),`replace_clip`,🆕 Đề xuất,"thay clip giữ nguyên vị trí (khác replace_clip_media đổi media gốc) [leancoderkavy, hetpatel]",-
+161,Editing precision,rename_clip,✅,Live-tested: đổi tên track item đúng (khác project item gốc),2026-09-14
+162,Editing precision,enable_disable_clip,✅,Live-tested cả 2 chiều bật/tắt đúng,2026-09-14
+163,Editing precision,move_clip_to_track,❌ Không thể,XÁC NHẬN 2026-09-14 qua probe TrackItem: không có API move-to-track,-
+164,Editing precision (chỉ có ripple-style hiện tại qua trim_clip/ripple_delete),"`get_clip_at_playhead` / `get_clip_at_position` [leancoderkavy, hetpatel-expanded]",🆕 Đề xuất,,-
+165,Editing precision (chỉ có ripple-style hiện tại qua trim_clip/ripple_delete),`get_clip_properties` / `get_full_clip_info`,🆕 Đề xuất,"đọc chi tiết 1 clip [leancoderkavy, hetpatel-expanded]",-
+166,Editing precision (chỉ có ripple-style hiện tại qua trim_clip/ripple_delete),`get_total_clip_count` [leancoderkavy],🆕 Đề xuất,,-
+167,Editing precision (chỉ có ripple-style hiện tại qua trim_clip/ripple_delete),`get_next_edit_point` / `move_playhead_to_edit` / `go_to_next_edit` / `go_to_previous_edit`,🆕 Đề xuất,"nhảy theo điểm cắt [leancoderkavy, antipaster]",-
+168,Editing precision (chỉ có ripple-style hiện tại qua trim_clip/ripple_delete),`get_timeline_gaps` / `get_timeline_summary`,🆕 Đề xuất,tìm khoảng trống/tóm tắt timeline [leancoderkavy],-
+169,Editing precision (chỉ có ripple-style hiện tại qua trim_clip/ripple_delete),`crop_clip`,🆕 Đề xuất,"Crop effect trực tiếp [leancoderkavy, hetpatel]",-
+170,Editing precision (chỉ có ripple-style hiện tại qua trim_clip/ripple_delete),`stabilize_clip` / `inspect_stabilizer_status`,🆕 Đề xuất,"Warp Stabilizer [leancoderkavy, hetpatel]",-
+171,Editing precision (chỉ có ripple-style hiện tại qua trim_clip/ripple_delete),`set_frame_blend` [leancoderkavy],🆕 Đề xuất,,-
+172,Editing precision (chỉ có ripple-style hiện tại qua trim_clip/ripple_delete),`match_frame`,🆕 Đề xuất,nhảy tới nguồn tại playhead [leancoderkavy],-
+173,Editing precision (chỉ có ripple-style hiện tại qua trim_clip/ripple_delete),`get_clip_speed`,🆕 Đề xuất,"đọc tốc độ/trạng thái reverse hiện tại [leancoderkavy, hetpatel-expanded, antipaster]",-
+174,Motion/Transform,get_clip_transform,✅,"FIX 2026-09-14: Position/Anchor Point đọc {value:[x,y]} chuẩn hoá 0-1, không phải pixel {x,y} như giả định cũ. Fix quy đổi qua getFrameDimensions(). Live-tested. set_clip_transform (1 lệnh gộp) chưa làm riêng - có 5 tool set_clip_* tách lẻ",2026-09-14
+175,"Motion/Transform (Clip properties — 0 tool riêng hiện tại, chỉ có set_effect_param chung)",`set_clip_properties` / `set_clip_properties_batch`,🆕 Đề xuất,"áp dụng hàng loạt clip [leancoderkavy, hetpatel]",-
+176,Motion/Transform,set_clip_opacity,✅,Live-tested: verify read-back khớp đúng,2026-09-14
+177,Motion/Transform,set_clip_position / set_clip_scale,✅,"Live-tested sau fix (xem get_clip_transform): pixel quy đổi đúng cả 2 chiều, test center + lệch tâm. set_scale_width_height/set_uniform_scale chưa làm riêng",2026-09-14
+178,Motion/Transform,set_clip_rotation / set_clip_anchor_point,✅,Live-tested: verify read-back khớp đúng,2026-09-14
+179,"Motion/Transform (Clip properties — 0 tool riêng hiện tại, chỉ có set_effect_param chung)","`set_anti_alias_quality` [leancoderkavy, hetpatel-expanded]",🆕 Đề xuất,,-
+180,"Motion/Transform (Clip properties — 0 tool riêng hiện tại, chỉ có set_effect_param chung)","`set_blend_mode` [leancoderkavy, hetpatel-expanded]",🆕 Đề xuất,,-
+181,"Motion/Transform (Clip properties — 0 tool riêng hiện tại, chỉ có set_effect_param chung)","`get_clip_adjustment_layer` / `add_adjustment_layer` [leancoderkavy, hetpatel-expanded, antipaster]",🆕 Đề xuất,,-
+182,Selection nâng cao,`invert_selection` [leancoderkavy],🆕 Đề xuất,,-
+183,Selection nâng cao,"`select_clips_by_name` / `select_clips_by_color` / `select_disabled_clips` [leancoderkavy, hetpatel-expanded]",🆕 Đề xuất,,-
+184,Selection nâng cao,`set_clip_selection`,🆕 Đề xuất,"chọn/bỏ chọn 1 clip cụ thể [leancoderkavy, hetpatel-expanded, antipaster]",-
+185,Effects nâng cao (ngoài apply/get/set-param/remove đã có),`apply_audio_effect`,🆕 Đề xuất,"riêng biệt effect âm thanh [leancoderkavy, hetpatel, antipaster]",-
+186,Effects nâng cao (ngoài apply/get/set-param/remove đã có),`batch_apply_effect` / `apply_audio_effect_to_all_clips`,🆕 Đề xuất,"áp effect hàng loạt [leancoderkavy, hetpatel]",-
+187,Effects nâng cao,remove_all_effects,✅,"BUG AN TOÀN đã fix 2026-09-14: mặc định xoá luôn cả Motion/Opacity (component nội tại UI không cho xoá) làm clip mất khả năng transform. Fix: mặc định bỏ qua, thêm includeIntrinsic để chủ động xoá. Live-tested. remove_effect_by_name = remove_effect đã có sẵn từ trước",2026-09-14
+188,Effects nâng cao,get_effect_properties,✅,Live-tested: đọc đủ tên/giá trị/keyframeCount từng param,2026-09-14
+189,Effects nâng cao,set_effect_enabled,❌ Không thể,"XÁC NHẬN 2026-09-14 qua probe Component: chỉ có getParam/getMatchName/getDisplayName/getParamCount, không có API enable/bypass",-
+190,Effects nâng cao (ngoài apply/get/set-param/remove đã có),`set_color_value`,🆕 Đề xuất,"set màu trên effect property [leancoderkavy, hetpatel-expanded]",-
+191,Effects nâng cao (ngoài apply/get/set-param/remove đã có),`copy_effect_values` / `copy_effects_between_clips`,🆕 Đề xuất,"copy effect giữa các clip [leancoderkavy, hetpatel-expanded]",-
+192,Effects nâng cao (ngoài apply/get/set-param/remove đã có),`apply_lut`,🆕 Đề xuất,"LUT file qua Lumetri [leancoderkavy, hetpatel]",-
+193,Effects nâng cao (ngoài apply/get/set-param/remove đã có),`color_correct`,🆕 Đề xuất,"color correction cơ bản [leancoderkavy, hetpatel]",-
+194,Transitions nâng cao,`add_transition_to_clip`,🆕 Đề xuất,"transition tại 1 đầu clip cụ thể [leancoderkavy, hetpatel]",-
+195,Transitions nâng cao,"`list_available_audio_transitions` [leancoderkavy, hetpatel, ayushozha]",🆕 Đề xuất,,-
+196,Transitions nâng cao,`remove_transition`,🆕 Đề xuất,"gỡ transition [leancoderkavy, ayushozha, antipaster]",-
+197,Transitions nâng cao,`set_default_transition` [antipaster],🆕 Đề xuất,,-
+198,Transitions nâng cao,`get_transition_properties` / `get_duration_of_transition` [ayushozha],🆕 Đề xuất,,-
+199,Audio nâng cao,set_track_volume / set_track_pan / solo_track,❌ Không thể,"XÁC NHẬN 2026-09-14 qua probe Track: chỉ có createSetNameAction/setMute/getIndex/isMuted/getTrackItems, không có volume/pan/solo",-
+200,"Audio nâng cao (cấp track, không chỉ clip)",`set_clips_volume`,🆕 Đề xuất,set volume hàng loạt clip trên 1 track [leancoderkavy],-
+201,Audio nâng cao,get_clip_volume,✅,Live-tested: đọc đúng gainDb + muted,2026-09-14
+202,Audio nâng cao,set_clip_mute,✅,Live-tested cả 2 chiều - verify mute độc lập với gainDb,2026-09-14
+203,"Audio nâng cao (cấp track, không chỉ clip)",`analyze_loudness` (EBU R128 LUFS) / `normalize_loudness_file` [leancoderkavy,🆕 Đề xuất,giá trị cao cho chuẩn phát sóng],-
+204,"Audio nâng cao (cấp track, không chỉ clip)",`detect_audio_transients` / `detect_beats` [leancoderkavy,🆕 Đề xuất,khớp trực tiếp Beat Shake/Motion Engine],-
+205,"Audio nâng cao (cấp track, không chỉ clip)",`apply_audio_crossfade`,🆕 Đề xuất,"tự động crossfade tại điểm cắt liền kề [leancoderkavy, antipaster]",-
+206,"Audio nâng cao (cấp track, không chỉ clip)",`get_audio_mixer_state` / `normalize_audio` [ayushozha],🆕 Đề xuất,,-
+207,"Audio nâng cao (cấp track, không chỉ clip)","`set_audio_channel_mapping` / `get_audio_channel_mapping` [leancoderkavy, antipaster]",🆕 Đề xuất,,-
+208,Color nâng cao,`read_video_scopes`,🆕 Đề xuất,waveform/parade/vectorscope readback để QC màu [leancoderkavy — giá trị cao],-
+209,Color nâng cao,`premiere_lumetri_set_*`,🆕 Đề xuất,điều khiển từng bánh xe/curve Lumetri riêng lẻ thay vì gộp chung [ayushozha],-
+210,Video/Scene Analysis (ngoài detect_scene_edits đã có),`detect_source_scene_changes`,🆕 Đề xuất,cut detection qua FFmpeg trên file nguồn [leancoderkavy],-
+211,Video/Scene Analysis (ngoài detect_scene_edits đã có),`detect_motion_peaks`,🆕 Đề xuất,tìm khoảnh khắc chuyển động cao [leancoderkavy],-
+212,Video/Scene Analysis (ngoài detect_scene_edits đã có),`detect_active_picture_bounds`,🆕 Đề xuất,phát hiện letterbox/pillarbox [leancoderkavy],-
+213,Video/Scene Analysis (ngoài detect_scene_edits đã có),`analyze_video_interlacing`,🆕 Đề xuất,progressive/interlaced [leancoderkavy],-
+214,Video/Scene Analysis (ngoài detect_scene_edits đã có),`analyze_video_qc`,🆕 Đề xuất,black frame/freeze frame/dropped frame trước khi xuất [leancoderkavy],-
+215,Video/Scene Analysis (ngoài detect_scene_edits đã có),`inspect_media_streams`,🆕 Đề xuất,ffprobe cho file media [leancoderkavy],-
+216,Captions/Subtitles nâng cao (ngoài create_caption_track/import_srt/read_sequence_captions đã có),`add_caption_track` / `add_caption` / `get_captions` / `update_caption` / `remove_caption`,🆕 Đề xuất,"thao tác caption TỪNG SEGMENT, chi tiết hơn nhiều so với tool hiện có [antipaster]",-
+217,Captions/Subtitles nâng cao (ngoài create_caption_track/import_srt/read_sequence_captions đã có),`import_captions` / `export_captions`,🆕 Đề xuất,"nhiều format (SRT/SCC/MCC) [antipaster, leancoderkavy]",-
+218,Captions/Subtitles nâng cao (ngoài create_caption_track/import_srt/read_sequence_captions đã có),`transcribe_sequence`,🆕 Đề xuất,speech-to-text tự động (Premiere 2021+) [antipaster],-
+219,Captions/Subtitles nâng cao (ngoài create_caption_track/import_srt/read_sequence_captions đã có),`validate_closed_captions`,🆕 Đề xuất,kiểm tra tuân thủ CC [ayushozha],-
+220,Captions/Subtitles nâng cao (ngoài create_caption_track/import_srt/read_sequence_captions đã có),`build_caption_artifact`,🆕 Đề xuất,tạo SRT/VTT kiểu CapCut/Submagic [leancoderkavy],-
+221,Captions/Subtitles nâng cao (ngoài create_caption_track/import_srt/read_sequence_captions đã có),`check_caption_safe_zone`,🆕 Đề xuất,check vị trí caption theo platform safe zone [leancoderkavy],-
+222,Captions/Subtitles nâng cao (ngoài create_caption_track/import_srt/read_sequence_captions đã có),`get_clip_transcript_uxp` [UXP],🆕 Đề xuất,đọc transcript NATIVE của Premiere (khác transcript tự sinh của mình) [leancoderkavy],-
+223,Captions/Subtitles nâng cao (ngoài create_caption_track/import_srt/read_sequence_captions đã có),`has_transcript_uxp` [UXP] / `get_transcript_languages_uxp` [UXP] [leancoderkavy],🆕 Đề xuất,,-
+224,Captions/Subtitles nâng cao (ngoài create_caption_track/import_srt/read_sequence_captions đã có),`import_transcript_uxp` [UXP],🆕 Đề xuất,ghi transcript native [leancoderkavy],-
+225,Captions/Subtitles nâng cao (ngoài create_caption_track/import_srt/read_sequence_captions đã có),`search_clip_transcript_uxp` [UXP],🆕 Đề xuất,tìm trong transcript không sửa gì [leancoderkavy],-
+226,Captions/Subtitles nâng cao (ngoài create_caption_track/import_srt/read_sequence_captions đã có),`inspect_caption_tracks_uxp` [UXP],🆕 Đề xuất,kiểm kê caption track native [leancoderkavy],-
+227,"AI editorial — pattern ""plan → preview → apply"" (nhóm hoàn toàn mới, giá trị kiến trúc cao)",`detect_repeated_takes`,🆕 Đề xuất,phát hiện thoại lặp (retake) [leancoderkavy],-
+228,"AI editorial — pattern ""plan → preview → apply"" (nhóm hoàn toàn mới, giá trị kiến trúc cao)",`analyze_dialogue_edit_candidates`,🆕 Đề xuất,gợi ý điểm cắt thoại [leancoderkavy],-
+229,"AI editorial — pattern ""plan → preview → apply"" (nhóm hoàn toàn mới, giá trị kiến trúc cao)",`rank_short_form_candidates`,🆕 Đề xuất,xếp hạng đoạn video dài thành ứng viên short-form [leancoderkavy],-
+230,"AI editorial — pattern ""plan → preview → apply"" (nhóm hoàn toàn mới, giá trị kiến trúc cao)",`plan_chapter_markers`,🆕 Đề xuất,tự tạo chapter YouTube từ transcript [leancoderkavy],-
+231,"AI editorial — pattern ""plan → preview → apply"" (nhóm hoàn toàn mới, giá trị kiến trúc cao)",`plan_filler_word_removal`,🆕 Đề xuất,kế hoạch cắt từ đệm (ừm/à) [leancoderkavy],-
+232,"AI editorial — pattern ""plan → preview → apply"" (nhóm hoàn toàn mới, giá trị kiến trúc cao)",`plan_pause_tightening`,🆕 Đề xuất,kế hoạch rút ngắn khoảng lặng [leancoderkavy],-
+233,"AI editorial — pattern ""plan → preview → apply"" (nhóm hoàn toàn mới, giá trị kiến trúc cao)",`plan_word_mute_ranges`,🆕 Đề xuất,kế hoạch mute/bleep từ ngữ [leancoderkavy],-
+234,"AI editorial — pattern ""plan → preview → apply"" (nhóm hoàn toàn mới, giá trị kiến trúc cao)",`plan_speaker_checkerboard`,🆕 Đề xuất,layout xen kẽ người nói [leancoderkavy],-
+235,"AI editorial — pattern ""plan → preview → apply"" (nhóm hoàn toàn mới, giá trị kiến trúc cao)",`plan_active_speaker_reframe`,🆕 Đề xuất,tự động reframe theo người đang nói [leancoderkavy],-
+236,"AI editorial — pattern ""plan → preview → apply"" (nhóm hoàn toàn mới, giá trị kiến trúc cao)",`plan_beat_montage`,🆕 Đề xuất,kế hoạch montage theo beat [leancoderkavy — khớp Beat Shake],-
+237,"AI editorial — pattern ""plan → preview → apply"" (nhóm hoàn toàn mới, giá trị kiến trúc cao)",`plan_emphasis_zoom_keyframes`,🆕 Đề xuất,kế hoạch zoom nhấn kiểu CapCut [leancoderkavy],-
+238,"AI editorial — pattern ""plan → preview → apply"" (nhóm hoàn toàn mới, giá trị kiến trúc cao)",`plan_shot_match`,🆕 Đề xuất,so khớp màu giữa các shot [leancoderkavy],-
+239,"AI editorial — pattern ""plan → preview → apply"" (nhóm hoàn toàn mới, giá trị kiến trúc cao)",`plan_silence_review_markers`,🆕 Đề xuất,đánh dấu review khoảng lặng [leancoderkavy],-
+240,"AI editorial — pattern ""plan → preview → apply"" (nhóm hoàn toàn mới, giá trị kiến trúc cao)",`plan_transcript_rough_cut_uxp` [UXP],🆕 Đề xuất,dựng rough-cut từ transcript native [leancoderkavy],-
+241,"AI editorial — pattern ""plan → preview → apply"" (nhóm hoàn toàn mới, giá trị kiến trúc cao)",`preview_transcript_edit_uxp` [UXP],🆕 Đề xuất,validate/merge đoạn transcript đã chọn [leancoderkavy],-
+242,"MOGRT nâng cao (bao gồm hướng khả thi cho vấn đề ""set text"" mình đang bí!)",`set_mogrt_text`,🆕 Đề xuất,"set trực tiếp field text của MOGRT [ayushozha — **đáng chú ý: đây là giải pháp khả dĩ cho gap ""MOGRT text"" mình đã đánh dấu là giới hạn hệ sinh thái — cần điều tra thêm xem có phải CEP-only hay có API UXP tương đương**]",-
+243,"MOGRT nâng cao (bao gồm hướng khả thi cho vấn đề ""set text"" mình đang bí!)",`set_mogrt_property`,🆕 Đề xuất,"set property MOGRT bất kỳ (không chỉ text) [ayushozha, antipaster]",-
+244,"MOGRT nâng cao (bao gồm hướng khả thi cho vấn đề ""set text"" mình đang bí!)",`get_mogrt_properties` / `get_mogrt_component`,🆕 Đề xuất,"đọc property editable của MOGRT [ayushozha, leancoderkavy, antipaster]",-
+245,"MOGRT nâng cao (bao gồm hướng khả thi cho vấn đề ""set text"" mình đang bí!)",`import_mogrt_from_library`,🆕 Đề xuất,"từ Creative Cloud Library [leancoderkavy, hetpatel]",-
+246,"MOGRT nâng cao (bao gồm hướng khả thi cho vấn đề ""set text"" mình đang bí!)",`add_mogrt_to_timeline`,🆕 Đề xuất,đặt MOGRT lên timeline (khác import_mogrt chỉ import vào project) [antipaster],-
+247,"MOGRT nâng cao (bao gồm hướng khả thi cho vấn đề ""set text"" mình đang bí!)",`get_available_mogrts`,🆕 Đề xuất,liệt kê MOGRT template có sẵn [antipaster],-
+248,"MOGRT nâng cao (bao gồm hướng khả thi cho vấn đề ""set text"" mình đang bí!)",`add_text_graphic` / `style_text_graphic`,🆕 Đề xuất,text graphic không cần MOGRT + sửa text/vị trí [antipaster],-
+249,"MOGRT nâng cao (bao gồm hướng khả thi cho vấn đề ""set text"" mình đang bí!)",`add_color_matte` / `add_black_video` / `add_universal_counting_leader`,🆕 Đề xuất,"object timeline mới hoàn toàn (màu nền, slug, leader) [antipaster]",-
+250,Metadata nâng cao (ngoài get/set field-based đã có),`get_xmp_metadata` / `set_xmp_metadata`,🆕 Đề xuất,"RAW XML XMP, khác field-based hiện có [leancoderkavy, antipaster]",-
+251,Metadata nâng cao (ngoài get/set field-based đã có),`get_file_metadata`,🆕 Đề xuất,"metadata KỸ THUẬT (codec/resolution/framerate/filesize), khác XMP [antipaster]",-
+252,Metadata nâng cao (ngoài get/set field-based đã có),`set_clip_description`,🆕 Đề xuất,mô tả/ghi chú riêng [antipaster],-
+253,Metadata nâng cao (ngoài get/set field-based đã có),`add_custom_metadata_field`,🆕 Đề xuất,thêm field metadata tuỳ chỉnh vào schema project [leancoderkavy],-
+254,Playback/Navigation,get/set_playhead_position,✅,Live-tested: di chuyển + đọc lại playhead khớp đúng,2026-09-14
+255,Playback/Navigation,play / stop / step_forward / step_backward,❌ Không thể,"XÁC NHẬN 2026-09-14 qua probe Sequence: không có command/menu execution API trong UXP",-
+256,Playback/Navigation & Meta-tooling,`open_in_source_monitor` / `get_source_monitor_clip` / `set_source_in_out`,🆕 Đề xuất,"Source Monitor control [leancoderkavy, antipaster]",-
+257,Playback/Navigation & Meta-tooling,`search_tools` / `get_tool_schema` / `invoke_tool`,🆕 Đề xuất,"meta-tool cho agent tự khám phá/gọi tool động, giảm tải context khi có nhiều tool [hetpatel — ý tưởng kiến trúc đáng cân nhắc khi mình có >100 tool]",-
+258,Playback/Navigation & Meta-tooling,`undo` / `redo`,🆕 Đề xuất,"LƯU Ý: nhiều repo (leancoderkavy) tự đánh dấu 2 tool này ""Unavailable — Premiere không có API undo-stack hỗ trợ"" — rủi ro cao, cân nhắc kỹ trước khi làm",-
+259,Playback/Navigation & Meta-tooling,"`add_universal_counting_leader` (trùng mục 19, xem ở trên)",🆕 Đề xuất,,-
+260,"AI Integration mẫu (pattern đáng học, không phải tool cụ thể của Premiere)",`elevenlabs_generate_speech` / `elevenlabs_list_voices` / `elevenlabs_generate_captions_voice`,🆕 Đề xuất,"tích hợp TTS bên thứ 3 ngay trong tool layer, tự động import + đặt lên timeline [antipaster — pattern gọi API AI ngoài từ trong tool, áp dụng được bất kể stack]",-
+261,"AI Integration mẫu (pattern đáng học, không phải tool cụ thể của Premiere)",`manage_workflow_checkpoints_uxp` [UXP],🆕 Đề xuất,checkpoint/restore pattern xác nhận CÓ THẬT trong UXP (không chỉ CaYatur suy đoán như báo cáo trước) [leancoderkavy],-
