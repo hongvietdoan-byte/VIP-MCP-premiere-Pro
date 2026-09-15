@@ -2478,5 +2478,572 @@ export const PREMIERE_TOOLS = [
     execute(wsBridge) {
       return wsBridge.sendCommand('get_source_monitor_clip', {}, 10000);
     }
+  },
+
+  // ==========================================================================
+  // Batch mở rộng đợt 2, 2026-09-15 — CHƯA LIVE-TEST (xem TODO.md).
+  // ==========================================================================
+
+  {
+    name: 'get_timeline_gaps',
+    description: 'Tìm toàn bộ khoảng trống (gap) giữa các clip trên timeline, theo từng track.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        trackType: { type: 'string', enum: ['video', 'audio', 'all'], description: 'Mặc định "all".' },
+        minGapSeconds: { type: 'number', description: 'Bỏ qua gap nhỏ hơn ngưỡng này (giây). Mặc định 0.05.' }
+      },
+      required: []
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('get_timeline_gaps', { trackType: args.trackType, minGapSeconds: args.minGapSeconds }, 20000);
+    }
+  },
+  {
+    name: 'get_next_edit_point',
+    description: 'Tìm điểm cắt (edit point — start/end của bất kỳ clip nào) gần nhất theo hướng chỉ định từ 1 thời điểm.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fromSeconds: { type: 'number', description: 'Thời điểm bắt đầu tìm (giây).' },
+        direction: { type: 'string', enum: ['next', 'previous'], description: 'Mặc định "next".' },
+        trackType: { type: 'string', enum: ['video', 'audio', 'all'], description: 'Mặc định "all".' }
+      },
+      required: ['fromSeconds']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('get_next_edit_point', { fromSeconds: args.fromSeconds, direction: args.direction, trackType: args.trackType }, 15000);
+    }
+  },
+  {
+    name: 'audit_timeline_health',
+    description: 'Báo cáo sức khoẻ tổng quan 1 sequence: số gap, clip disabled, media offline — gộp nhiều check thành 1 lệnh.',
+    inputSchema: {
+      type: 'object',
+      properties: { trackType: { type: 'string', enum: ['video', 'audio', 'all'], description: 'Mặc định "all".' } },
+      required: []
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('audit_timeline_health', { trackType: args.trackType }, 30000);
+    }
+  },
+  {
+    name: 'check_offline_media',
+    description: 'Quét TOÀN BỘ project item (mọi bin), liệt kê item nào đang offline.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('check_offline_media', {}, 60000);
+    }
+  },
+  {
+    name: 'get_duplicate_media',
+    description: 'Quét TOÀN BỘ project item, tìm các item khác tên nhưng trỏ cùng 1 file media.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('get_duplicate_media', {}, 60000);
+    }
+  },
+  {
+    name: 'get_unused_media',
+    description: 'Quét TOÀN BỘ project item, tìm item nào KHÔNG được dùng trong bất kỳ sequence nào của project.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('get_unused_media', {}, 60000);
+    }
+  },
+  {
+    name: 'apply_audio_effect',
+    description: 'Áp 1 effect AUDIO (qua AudioFilterFactory, khác apply_effect dùng cho video) lên clip đang chọn. Đảm bảo áp được component nhưng CHƯA chắc chỉnh param sau đó hoạt động (giới hạn đã biết từ set_clip_pan).',
+    inputSchema: {
+      type: 'object',
+      properties: { displayName: { type: 'string', description: 'Tên hiển thị effect audio, vd "Balance".' } },
+      required: ['displayName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('apply_audio_effect', { displayName: args.displayName }, 20000);
+    }
+  },
+  {
+    name: 'remove_effect_by_name',
+    description: 'Xoá effect khỏi clip đang chọn theo TÊN HIỂN THỊ (khác remove_effect dùng matchName).',
+    inputSchema: {
+      type: 'object',
+      properties: { displayName: { type: 'string', description: 'Tên hiển thị effect cần xoá.' } },
+      required: ['displayName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('remove_effect_by_name', { displayName: args.displayName }, 20000);
+    }
+  },
+  {
+    name: 'set_clips_volume',
+    description: 'Set volume (dB) hàng loạt cho tất cả clip audio trong 1 khoảng thời gian trên 1 track.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        startSeconds: { type: 'number', description: 'Bắt đầu khoảng (giây).' },
+        endSeconds: { type: 'number', description: 'Kết thúc khoảng (giây).' },
+        trackIndex: { type: 'number', description: 'Chỉ số track.' },
+        gainDb: { type: 'number', description: 'Giá trị dB mới cho tất cả clip trong khoảng.' },
+        trackType: { type: 'string', enum: ['video', 'audio'], description: 'Mặc định "audio".' }
+      },
+      required: ['startSeconds', 'endSeconds', 'trackIndex', 'gainDb']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_clips_volume', { startSeconds: args.startSeconds, endSeconds: args.endSeconds, trackIndex: args.trackIndex, gainDb: args.gainDb, trackType: args.trackType }, 30000);
+    }
+  },
+  {
+    name: 'crop_clip',
+    description: 'Áp effect Crop trực tiếp lên clip đang chọn với 4 giá trị left/top/right/bottom.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        left: { type: 'number', description: 'Mặc định 0.' },
+        top: { type: 'number', description: 'Mặc định 0.' },
+        right: { type: 'number', description: 'Mặc định 0.' },
+        bottom: { type: 'number', description: 'Mặc định 0.' }
+      },
+      required: []
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('crop_clip', { left: args.left, top: args.top, right: args.right, bottom: args.bottom }, 20000);
+    }
+  },
+  {
+    name: 'import_mogrt_from_library',
+    description: 'Đặt 1 MOGRT từ Creative Cloud Library lên timeline. CHƯA LIVE-TEST — chữ ký tham số libraryItemId chưa xác nhận (đoán theo insertMogrtFromPath).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        libraryItemId: { type: 'string', description: 'ID item MOGRT trong Creative Cloud Library.' },
+        startSeconds: { type: 'number', description: 'Vị trí đặt trên timeline (giây). Mặc định 0.' },
+        videoTrackIndex: { type: 'number', description: 'Track đích. Mặc định 2.' },
+        numAudioTracks: { type: 'number', description: 'Số audio track đi kèm. Mặc định 0.' }
+      },
+      required: ['libraryItemId']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('import_mogrt_from_library', { libraryItemId: args.libraryItemId, startSeconds: args.startSeconds, videoTrackIndex: args.videoTrackIndex, numAudioTracks: args.numAudioTracks }, 30000);
+    }
+  },
+  {
+    name: 'get_clip_lut',
+    description: 'Đọc input LUT ID và embedded LUT ID hiện tại của clip đang chọn.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('get_clip_lut', {}, 10000);
+    }
+  },
+  {
+    name: 'apply_lut',
+    description: 'Gán file LUT (.cube) cho clip đang chọn. XÁC NHẬN SAI THIẾT KẾ (2026-09-15 live-test): InputLUTID là GUID tham chiếu catalog nội bộ Premiere, KHÔNG PHẢI đường dẫn file — gọi với path không lỗi nhưng cũng không đổi gì. Cần điều tra thêm trước khi tin tưởng dùng.',
+    inputSchema: {
+      type: 'object',
+      properties: { lutPath: { type: 'string', description: 'Đường dẫn tuyệt đối file .cube.' } },
+      required: ['lutPath']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('apply_lut', { lutPath: args.lutPath }, 20000);
+    }
+  },
+
+  // ==========================================================================
+  // Batch mở rộng đợt 3, 2026-09-15 — CHƯA LIVE-TEST (xem TODO.md).
+  // ==========================================================================
+
+  {
+    name: 'set_clip_transform',
+    description: 'Set gộp nhiều thuộc tính transform (position/anchor/scale/rotation/opacity) của clip đang chọn trong 1 lệnh — chỉ truyền field nào cần đổi.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        x: { type: 'number', description: 'Vị trí X (pixel). Cần truyền kèm y.' },
+        y: { type: 'number', description: 'Vị trí Y (pixel). Cần truyền kèm x.' },
+        anchorX: { type: 'number', description: 'Anchor point X (pixel). Cần truyền kèm anchorY.' },
+        anchorY: { type: 'number', description: 'Anchor point Y (pixel). Cần truyền kèm anchorX.' },
+        scalePercent: { type: 'number', description: 'Scale (%).' },
+        degrees: { type: 'number', description: 'Rotation (độ).' },
+        opacityPercent: { type: 'number', description: 'Opacity (%).' }
+      },
+      required: []
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_clip_transform', {
+        x: args.x, y: args.y, anchorX: args.anchorX, anchorY: args.anchorY,
+        scalePercent: args.scalePercent, degrees: args.degrees, opacityPercent: args.opacityPercent
+      }, 25000);
+    }
+  },
+  {
+    name: 'import_image_sequence',
+    description: 'Import 1 chuỗi ảnh đánh số (vd frame_0001.png, frame_0002.png...) thành 1 clip video duy nhất — chỉ cần truyền file đầu tiên. CHƯA LIVE-TEST.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        firstFramePath: { type: 'string', description: 'Đường dẫn tuyệt đối file đầu tiên của chuỗi ảnh.' },
+        binName: { type: 'string', description: 'Bin đích. Bỏ trống = root.' }
+      },
+      required: ['firstFramePath']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('import_image_sequence', { firstFramePath: args.firstFramePath, binName: args.binName }, 30000);
+    }
+  },
+  {
+    name: 'has_transcript_uxp',
+    description: 'Kiểm tra clip đang chọn đã có transcript NATIVE của Premiere (Speech-to-Text) hay chưa.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('has_transcript_uxp', {}, 15000);
+    }
+  },
+  {
+    name: 'get_transcript_languages_uxp',
+    description: 'Liệt kê danh sách ngôn ngữ transcript native Premiere hỗ trợ.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('get_transcript_languages_uxp', {}, 15000);
+    }
+  },
+  {
+    name: 'get_clip_transcript_uxp',
+    description: 'Đọc transcript NATIVE (Speech-to-Text) của clip đang chọn, xuất dạng JSON. CHƯA LIVE-TEST — chữ ký tham số exportToJSON() chưa xác nhận.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('get_clip_transcript_uxp', {}, 20000);
+    }
+  },
+
+  // ==========================================================================
+  // Batch mở rộng đợt 4, 2026-09-15 — chữ ký create_sequence_from_media ĐÃ live-test xác nhận đúng
+  // (tạo sequence test thật rồi xoá ngay khi probe); import_sequences/import_ae_comps CHƯA live-test.
+  // ==========================================================================
+
+  {
+    name: 'create_sequence_from_media',
+    description: 'Tạo sequence mới từ 1 hoặc nhiều project item, tự động đặt clip lên timeline theo thứ tự — ĐÃ LIVE-TEST chữ ký đúng.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Tên sequence mới.' },
+        itemNames: { type: 'array', items: { type: 'string' }, description: 'Danh sách tên project item cần đặt vào sequence mới.' }
+      },
+      required: ['name', 'itemNames']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('create_sequence_from_media', { name: args.name, itemNames: args.itemNames }, 30000);
+    }
+  },
+  {
+    name: 'import_sequences',
+    description: 'Import sequence từ 1 project Premiere (.prproj) khác vào project hiện tại. CHƯA LIVE-TEST đầy đủ với file .prproj thật.',
+    inputSchema: {
+      type: 'object',
+      properties: { paths: { type: 'array', items: { type: 'string' }, description: 'Danh sách đường dẫn file .prproj nguồn.' } },
+      required: ['paths']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('import_sequences', { paths: args.paths }, 60000);
+    }
+  },
+  {
+    name: 'import_ae_comps',
+    description: 'Import composition từ file After Effects (.aep) vào project. CHƯA LIVE-TEST — chữ ký tham số chưa xác nhận.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Đường dẫn tuyệt đối file .aep.' },
+        binName: { type: 'string', description: 'Bin đích. Bỏ trống = root.' }
+      },
+      required: ['path']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('import_ae_comps', { path: args.path, binName: args.binName }, 60000);
+    }
+  },
+  {
+    name: 'add_custom_metadata_field',
+    description: 'Thêm field metadata tuỳ chỉnh vào schema PROJECT (áp dụng cho mọi item, hiện trong Project panel/Metadata panel). CHƯA LIVE-TEST — thay đổi schema cấp project, dùng thận trọng.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fieldName: { type: 'string', description: 'Tên field mới.' },
+        type: { type: 'string', enum: ['TEXT', 'INTEGER', 'REAL', 'BOOLEAN'], description: 'Kiểu dữ liệu. Mặc định TEXT.' }
+      },
+      required: ['fieldName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('add_custom_metadata_field', { fieldName: args.fieldName, type: args.type }, 20000);
+    }
+  },
+  {
+    name: 'create_subsequence',
+    description: 'Tạo subsequence mới từ work area (in/out) hiện tại của sequence. CHƯA LIVE-TEST — chữ ký tham số chưa xác nhận.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Tên subsequence mới. Bỏ trống = tự đặt tên.' },
+        sequenceName: { type: 'string', description: 'Sequence nguồn. Bỏ trống = sequence active.' }
+      },
+      required: []
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('create_subsequence', { name: args.name, sequenceName: args.sequenceName }, 20000);
+    }
+  },
+
+  // ==========================================================================
+  // Batch mở rộng đợt 6, 2026-09-15 — CHƯA LIVE-TEST (xem TODO.md).
+  // ==========================================================================
+
+  {
+    name: 'inspect_caption_tracks_uxp',
+    description: 'Kiểm kê caption track native của sequence: tên, muted, số item mỗi track.',
+    inputSchema: {
+      type: 'object',
+      properties: { sequenceName: { type: 'string', description: 'Tên sequence. Bỏ trống = sequence active.' } },
+      required: []
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('inspect_caption_tracks_uxp', { sequenceName: args.sequenceName }, 20000);
+    }
+  },
+  {
+    name: 'import_transcript_uxp',
+    description: 'Ghi transcript native (Speech-to-Text) cho clip đang chọn từ danh sách segment. THỬ NGHIỆM — cùng hạ tầng import_transcript_json, chưa xác nhận hiển thị đúng trong Text panel.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        segments: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              startSeconds: { type: 'number' }, endSeconds: { type: 'number' }, text: { type: 'string' }
+            },
+            required: ['startSeconds', 'endSeconds', 'text']
+          },
+          description: 'Danh sách segment transcript.'
+        }
+      },
+      required: ['segments']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('import_transcript_uxp', { segments: args.segments }, 30000);
+    }
+  },
+  {
+    name: 'select_clips_by_color',
+    description: 'Chọn tất cả clip trên timeline có color label khớp chỉ số chỉ định — thay thế toàn bộ selection hiện tại.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        colorLabelIndex: { type: 'number', description: 'Chỉ số color label cần khớp.' },
+        trackType: { type: 'string', enum: ['video', 'audio', 'all'], description: 'Mặc định "all".' }
+      },
+      required: ['colorLabelIndex']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('select_clips_by_color', { colorLabelIndex: args.colorLabelIndex, trackType: args.trackType }, 20000);
+    }
+  },
+  {
+    name: 'batch_rename_clips',
+    description: 'Đổi tên hàng loạt clip trong 1 khoảng thời gian trên 1 track — tự đánh số thứ tự sau prefix.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        startSeconds: { type: 'number' }, endSeconds: { type: 'number' }, trackIndex: { type: 'number' },
+        trackType: { type: 'string', enum: ['video', 'audio'], description: 'Mặc định "video".' },
+        newNamePrefix: { type: 'string', description: 'Tiền tố tên mới, vd "Shot" -> "Shot 1", "Shot 2"...' }
+      },
+      required: ['startSeconds', 'endSeconds', 'trackIndex', 'newNamePrefix']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('batch_rename_clips', args, 30000);
+    }
+  },
+  {
+    name: 'batch_enable_disable_clip',
+    description: 'Bật/tắt hàng loạt clip trong 1 khoảng thời gian trên 1 track.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        startSeconds: { type: 'number' }, endSeconds: { type: 'number' }, trackIndex: { type: 'number' },
+        trackType: { type: 'string', enum: ['video', 'audio'], description: 'Mặc định "video".' },
+        enabled: { type: 'boolean' }
+      },
+      required: ['startSeconds', 'endSeconds', 'trackIndex', 'enabled']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('batch_enable_disable_clip', args, 30000);
+    }
+  },
+  {
+    name: 'set_clip_properties_batch',
+    description: 'Áp gộp thuộc tính transform (position/scale/rotation/opacity/anchor) cho hàng loạt clip trong 1 khoảng thời gian trên 1 track.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        startSeconds: { type: 'number' }, endSeconds: { type: 'number' }, trackIndex: { type: 'number' },
+        trackType: { type: 'string', enum: ['video', 'audio'], description: 'Mặc định "video".' },
+        x: { type: 'number' }, y: { type: 'number' }, anchorX: { type: 'number' }, anchorY: { type: 'number' },
+        scalePercent: { type: 'number' }, degrees: { type: 'number' }, opacityPercent: { type: 'number' }
+      },
+      required: ['startSeconds', 'endSeconds', 'trackIndex']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_clip_properties_batch', args, 30000);
+    }
+  },
+  {
+    name: 'copy_effect_values',
+    description: 'Copy effect VÀ giá trị param hiện tại (khác copy_effects_between_clips chỉ copy việc áp effect) từ clip nguồn đang chọn sang 1 clip đích.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        targetStartSeconds: { type: 'number' },
+        targetTrackIndex: { type: 'number' },
+        targetTrackType: { type: 'string', enum: ['video', 'audio'], description: 'Mặc định "video".' }
+      },
+      required: ['targetStartSeconds', 'targetTrackIndex']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('copy_effect_values', { targetStartSeconds: args.targetStartSeconds, targetTrackIndex: args.targetTrackIndex, targetTrackType: args.targetTrackType }, 30000);
+    }
+  },
+  {
+    name: 'get_full_project_overview',
+    description: 'Snapshot toàn bộ state project trong 1 lệnh: tên/path project, danh sách sequence, sequence active, tổng số media item.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('get_full_project_overview', {}, 20000);
+    }
+  },
+  {
+    name: 'move_playhead_to_edit',
+    description: 'Di chuyển playhead tới edit point (start/end của clip bất kỳ) gần nhất theo hướng chỉ định.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        direction: { type: 'string', enum: ['next', 'previous'], description: 'Mặc định "next".' },
+        trackType: { type: 'string', enum: ['video', 'audio', 'all'], description: 'Mặc định "all".' }
+      },
+      required: []
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('move_playhead_to_edit', { direction: args.direction, trackType: args.trackType }, 15000);
+    }
+  },
+  {
+    name: 'replace_clip',
+    description: 'Thay project item của 1 clip trên timeline bằng item khác, GIỮ NGUYÊN vị trí+duration (khác replace_clip_media đổi media gốc của item hiện có).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        startSeconds: { type: 'number', description: 'Vị trí clip cần thay trên timeline.' },
+        trackIndex: { type: 'number' },
+        trackType: { type: 'string', enum: ['video', 'audio'], description: 'Mặc định "video".' },
+        newItemName: { type: 'string', description: 'Tên project item mới để thay vào.' }
+      },
+      required: ['startSeconds', 'trackIndex', 'newItemName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('replace_clip', { startSeconds: args.startSeconds, trackIndex: args.trackIndex, trackType: args.trackType, newItemName: args.newItemName }, 20000);
+    }
+  },
+  {
+    name: 'set_source_in_out',
+    description: 'Set in/out cho item đang mở trong Source Monitor.',
+    inputSchema: {
+      type: 'object',
+      properties: { inSeconds: { type: 'number' }, outSeconds: { type: 'number' } },
+      required: ['inSeconds', 'outSeconds']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_source_in_out', { inSeconds: args.inSeconds, outSeconds: args.outSeconds }, 15000);
+    }
+  },
+  {
+    name: 'stabilize_clip',
+    description: 'Áp effect Warp Stabilizer lên clip đang chọn. CHƯA LIVE-TEST — matchName chưa xác nhận qua search_effects, và chưa rõ việc áp qua UXP có tự trigger phân tích như qua UI hay không.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('stabilize_clip', {}, 20000);
+    }
+  },
+  {
+    name: 'match_frame',
+    description: 'Mở Source Monitor tại đúng vị trí nguồn tương ứng với clip đang ở playhead trên track chỉ định.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        trackIndex: { type: 'number', description: 'Mặc định 0.' },
+        trackType: { type: 'string', enum: ['video', 'audio'], description: 'Mặc định "video".' }
+      },
+      required: []
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('match_frame', { trackIndex: args.trackIndex, trackType: args.trackType }, 15000);
+    }
+  },
+  {
+    name: 'set_xmp_metadata',
+    description: 'Ghi đè TOÀN BỘ XMP metadata thô của clip đang chọn (khác set_clip_metadata chỉ merge field dc: cụ thể) — người dùng tự cung cấp XMP string đầy đủ.',
+    inputSchema: {
+      type: 'object',
+      properties: { xmpString: { type: 'string', description: 'Nội dung XMP đầy đủ (bao gồm khai báo namespace).' } },
+      required: ['xmpString']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_xmp_metadata', { xmpString: args.xmpString }, 20000);
+    }
+  },
+  {
+    name: 'set_override_frame_rate',
+    description: 'Override frame rate diễn giải của 1 project item — đường thay thế set_footage_interpretation, dùng createSetOverrideFrameRateAction riêng biệt. CHƯA LIVE-TEST.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        itemName: { type: 'string' },
+        frameRate: { type: 'number' }
+      },
+      required: ['itemName', 'frameRate']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_override_frame_rate', { itemName: args.itemName, frameRate: args.frameRate }, 15000);
+    }
+  },
+  {
+    name: 'set_override_pixel_aspect_ratio',
+    description: 'Override pixel aspect ratio diễn giải của 1 project item — đường thay thế set_footage_interpretation, dùng createSetOverridePixelAspectRatioAction riêng biệt. CHƯA LIVE-TEST.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        itemName: { type: 'string' },
+        pixelAspectRatio: { description: 'Number (tự quy đổi "N:1") hoặc string "N:M".' }
+      },
+      required: ['itemName', 'pixelAspectRatio']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_override_pixel_aspect_ratio', { itemName: args.itemName, pixelAspectRatio: args.pixelAspectRatio }, 15000);
+    }
+  },
+  {
+    name: 'analyze_loudness',
+    description: 'Đọc PEAK/RMS dBFS xấp xỉ của clip audio đang chọn. KHÔNG PHẢI chuẩn EBU R128 LUFS thật (thiếu K-weighting filter) — chỉ tham khảo tương đối.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('analyze_loudness', {}, 30000);
+    }
+  },
+  {
+    name: 'get_project_panel_selection',
+    description: 'Đọc danh sách item đang được chọn trong Project panel (khác selection trên timeline). Chỉ đọc — không có API set tương ứng.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('get_project_panel_selection', {}, 15000);
+    }
   }
 ];

@@ -473,6 +473,63 @@ async function _dispatchCommand(msg) {
       case "open_in_source_monitor": result = await openInSourceMonitor(params);                       break;
       case "get_source_monitor_clip": result = await getSourceMonitorClip();                           break;
 
+      // Group 37: Timeline analysis & media audit (2026-09-15, batch đợt 2)
+      case "get_timeline_gaps":      result = await getTimelineGaps(params);                            break;
+      case "get_next_edit_point":    result = await getNextEditPoint(params);                           break;
+      case "audit_timeline_health":  result = await auditTimelineHealth(params);                        break;
+      case "check_offline_media":    result = await checkOfflineMedia();                                break;
+      case "get_duplicate_media":    result = await getDuplicateMedia();                                break;
+      case "get_unused_media":       result = await getUnusedMedia();                                   break;
+
+      // Group 38: Effects/Audio nâng cao đợt 2 (2026-09-15)
+      case "apply_audio_effect":     result = await applyAudioEffect(params, bLog);                     break;
+      case "remove_effect_by_name":  result = await removeEffectByName(params, bLog);                   break;
+      case "set_clips_volume":       result = await setClipsVolume(params);                             break;
+      case "crop_clip":              result = await cropClip(params, bLog);                             break;
+
+      // Group 39: MOGRT/LUT nâng cao (2026-09-15) — CHƯA live-test, chữ ký nhiều phần chưa chắc
+      case "import_mogrt_from_library": result = await importMogrtFromLibrary(params, bLog);            break;
+      case "get_clip_lut":           result = await getClipLut(params, bLog);                           break;
+      case "apply_lut":              result = await applyLut(params, bLog);                             break;
+
+      // Group 40: Transform gộp & Import đợt 3 (2026-09-15)
+      case "set_clip_transform":     result = await setClipTransform(params, bLog);                     break;
+      case "import_image_sequence":  result = await importImageSequence(params);                        break;
+
+      // Group 41: Native Transcript (2026-09-15) — CHƯA live-test
+      case "has_transcript_uxp":     result = await hasTranscriptUxp(params, bLog);                     break;
+      case "get_transcript_languages_uxp": result = await getTranscriptLanguagesUxp();                  break;
+      case "get_clip_transcript_uxp": result = await getClipTranscriptUxp(params, bLog);                 break;
+
+      // Group 42: Sequence/Import nâng cao đợt 4 (2026-09-15) — CHƯA live-test import_sequences/import_ae_comps
+      case "create_sequence_from_media": result = await createSequenceFromMedia(params);                break;
+      case "import_sequences":       result = await importSequencesTool(params);                        break;
+      case "import_ae_comps":        result = await importAeComps(params);                               break;
+
+      // Group 43: Metadata nâng cao đợt 5 (2026-09-15) — CHƯA live-test
+      case "add_custom_metadata_field": result = await addCustomMetadataField(params);                   break;
+      case "create_subsequence":     result = await createSubsequenceTool(params);                       break;
+
+      // Group 44: Batch mở rộng đợt 6 (2026-09-15) — CHƯA live-test
+      case "inspect_caption_tracks_uxp": result = await inspectCaptionTracksUxp(params);                 break;
+      case "import_transcript_uxp":  result = await importTranscriptUxp(params, bLog);                   break;
+      case "select_clips_by_color":  result = await selectClipsByColor(params);                          break;
+      case "batch_rename_clips":     result = await batchRenameClips(params);                            break;
+      case "batch_enable_disable_clip": result = await batchEnableDisableClip(params);                   break;
+      case "set_clip_properties_batch": result = await setClipPropertiesBatch(params);                   break;
+      case "copy_effect_values":     result = await copyEffectValues(params, bLog);                      break;
+      case "get_full_project_overview": result = await getFullProjectOverview();                         break;
+      case "move_playhead_to_edit":  result = await movePlayheadToEdit(params);                          break;
+      case "replace_clip":           result = await replaceClip(params, bLog);                           break;
+      case "set_source_in_out":      result = await setSourceInOut(params);                              break;
+      case "stabilize_clip":         result = await stabilizeClip(params, bLog);                         break;
+      case "match_frame":            result = await matchFrame(params);                                  break;
+      case "set_xmp_metadata":       result = await setXmpMetadataRaw(params, bLog);                     break;
+      case "set_override_frame_rate": result = await setOverrideFrameRate(params);                       break;
+      case "set_override_pixel_aspect_ratio": result = await setOverridePixelAspectRatio(params);        break;
+      case "analyze_loudness":       result = await analyzeLoudness(params, bLog);                       break;
+      case "get_project_panel_selection": result = await getProjectPanelSelection();                     break;
+
       default:
         throw new Error("Tool không được hỗ trợ: " + tool + ". Dùng get_beat_styles để xem danh sách.");
     }
@@ -1007,6 +1064,163 @@ async function _cmdDebugProbeApi() {
   probe("Constants:VideoDisplayFormatType", () => _ppro.Constants && _ppro.Constants.VideoDisplayFormatType);
   probe("Constants:AudioDisplayFormatType", () => _ppro.Constants && _ppro.Constants.AudioDisplayFormatType);
   probe("Constants:PixelAspectRatio", () => _ppro.Constants && _ppro.Constants.PixelAspectRatio);
+  probe("ClipProjectItem: detachProxy candidates", () => {
+    const p = _ppro.ClipProjectItem && _ppro.ClipProjectItem.prototype;
+    if (!p) return "KHÔNG có ClipProjectItem";
+    const cands = ["detachProxy", "removeProxy", "clearProxy", "unattachProxy"];
+    return cands.filter(c => typeof p[c] === "function");
+  });
+  probe("Sequence: target track candidates", () => {
+    const p = _ppro.Sequence && _ppro.Sequence.prototype;
+    if (!p) return "KHÔNG có Sequence";
+    const cands = ["getTargetTrack", "setTargetTrack", "getTargetVideoTrack", "getTargetAudioTrack", "isTargeted", "setTargeted"];
+    return cands.filter(c => typeof p[c] === "function");
+  });
+  probe("VideoTrack/AudioTrack: targeted candidates", () => {
+    const p1 = _ppro.VideoTrack && _ppro.VideoTrack.prototype;
+    const p2 = _ppro.AudioTrack && _ppro.AudioTrack.prototype;
+    const cands = ["isTargeted", "setTargeted", "getIsTargeted"];
+    return {
+      video: p1 ? cands.filter(c => typeof p1[c] === "function") : "no VideoTrack",
+      audio: p2 ? cands.filter(c => typeof p2[c] === "function") : "no AudioTrack"
+    };
+  });
+  probe("ClipProjectItem.createSetInputLUTIDAction arity", () => {
+    const p = _ppro.ClipProjectItem && _ppro.ClipProjectItem.prototype;
+    const fn = p && p.createSetInputLUTIDAction;
+    return { arity: fn ? fn.length : null, str: fn ? String(fn).slice(0, 200) : null };
+  });
+  probe("Application own props (tìm cách lấy instance)", () => {
+    const A = _ppro.Application;
+    if (!A) return "KHÔNG có Application";
+    return Object.getOwnPropertyNames(A);
+  });
+  probe("Component: displayName/matchName cho AE.ADBE Input LUT (nếu có sẵn)", () => "skip - probe LUT riêng trong tool khác");
+  probe("TransitionFactory.getAudioTransitionMatchNames", () => {
+    const tf = _ppro.TransitionFactory;
+    return tf ? Object.getOwnPropertyNames(tf).filter(n => /audio|video/i.test(n)) : "KHÔNG có TransitionFactory";
+  });
+  probe("Transcript static methods (own props)", () => {
+    const T = _ppro.Transcript;
+    return T ? Object.getOwnPropertyNames(T) : "KHÔNG có Transcript";
+  });
+  probe("ClipProjectItem: transcript candidates", () => {
+    const p = _ppro.ClipProjectItem && _ppro.ClipProjectItem.prototype;
+    if (!p) return "KHÔNG có ClipProjectItem";
+    const cands = ["getTranscript", "hasTranscript", "getTranscriptLanguages", "importTranscript"];
+    return cands.filter(c => typeof p[c] === "function");
+  });
+  probe("ComponentParam: color/type-related methods", () => {
+    const cp = _ppro.ComponentParam && _ppro.ComponentParam.prototype;
+    return cp ? Object.getOwnPropertyNames(cp) : "KHÔNG có ComponentParam (top-level)";
+  });
+  probe("Project.importFiles arity/str", () => {
+    const p = _ppro.Project && _ppro.Project.prototype;
+    const fn = p && p.importFiles;
+    return { arity: fn ? fn.length : null };
+  });
+  probe("Project: importAEComps/importSequences/createSequenceFromMedia str", () => {
+    const p = _ppro.Project && _ppro.Project.prototype;
+    if (!p) return "KHÔNG có Project";
+    const out = {};
+    for (const n of ["importAEComps", "importAllAEComps", "importSequences", "createSequenceFromMedia", "createSequenceWithPresetPath"]) {
+      out[n] = p[n] ? String(p[n]).slice(0, 250) : "KHÔNG có";
+    }
+    return out;
+  });
+  probe("Project: createNewX candidates (color matte/black video/bars-tone)", () => {
+    const p = _ppro.Project && _ppro.Project.prototype;
+    if (!p) return "KHÔNG có Project";
+    const cands = ["createNewColorMatte", "createColorMatte", "createNewItem", "createUniversalCountingLeader",
+      "createBarsAndTone", "createNewBlackVideo", "createNewTitle", "createTransparentVideo", "createNewSolid"];
+    return cands.filter(c => typeof p[c] === "function");
+  });
+  probe("VideoFilterFactory/ComponentFactory: color matte candidates (own props)", () => {
+    const vf = _ppro.VideoFilterFactory;
+    const cf = _ppro.ComponentFactory;
+    return {
+      VideoFilterFactory: vf ? Object.getOwnPropertyNames(vf) : null,
+      ComponentFactory: cf ? Object.getOwnPropertyNames(cf) : null
+    };
+  });
+  probe("SequenceEditor: createAddItemAction str (đặt object timeline mới)", () => {
+    const p = _ppro.SequenceEditor && _ppro.SequenceEditor.prototype;
+    const fn = p && p.createAddItemAction;
+    return fn ? String(fn).slice(0, 250) : null;
+  });
+  probe("ScratchDiskSettings proto+own", () => {
+    const c = _ppro.ScratchDiskSettings;
+    const p = c && c.prototype;
+    return { own: c ? Object.getOwnPropertyNames(c) : null, proto: p ? Object.getOwnPropertyNames(p) : null };
+  });
+  probe("IngestSettings proto+own", () => {
+    const c = _ppro.IngestSettings;
+    const p = c && c.prototype;
+    return { own: c ? Object.getOwnPropertyNames(c) : null, proto: p ? Object.getOwnPropertyNames(p) : null };
+  });
+  probe("ProjectItemSelection proto+own", () => {
+    const c = _ppro.ProjectItemSelection;
+    const p = c && c.prototype;
+    return { own: c ? Object.getOwnPropertyNames(c) : null, proto: p ? Object.getOwnPropertyNames(p) : null };
+  });
+  probe("ClipProjectItem: poster frame / color space candidates", () => {
+    const p = _ppro.ClipProjectItem && _ppro.ClipProjectItem.prototype;
+    if (!p) return "KHÔNG có";
+    const cands = ["getPosterFrame", "setPosterFrame", "createSetPosterFrameAction", "getColorSpace", "setColorSpace", "createSetColorSpaceAction"];
+    return cands.filter(c => typeof p[c] === "function");
+  });
+  probe("Project: workspace/scratch disk candidates", () => {
+    const p = _ppro.Project && _ppro.Project.prototype;
+    if (!p) return "KHÔNG có";
+    const cands = ["getWorkspaces", "setWorkspace", "getScratchDiskSettings", "setScratchDiskSettings",
+      "flushCache", "clearCache", "getIngestSettings", "setIngestSettings", "getProjectSettings", "setProjectSettings"];
+    return cands.filter(c => typeof p[c] === "function");
+  });
+  probe("ProjectSettings proto (recheck sâu hơn — lần trước chỉ thấy constructor)", () => {
+    const p = _ppro.ProjectSettings && _ppro.ProjectSettings.prototype;
+    return p ? Object.getOwnPropertyNames(p) : "KHÔNG có";
+  });
+  probe("Sequence: work area / createSubsequence str", () => {
+    const p = _ppro.Sequence && _ppro.Sequence.prototype;
+    if (!p) return "KHÔNG có";
+    return {
+      createSubsequence: p.createSubsequence ? String(p.createSubsequence).slice(0, 200) : null,
+      hasWorkArea: ["getWorkArea", "setWorkArea", "isWorkAreaEnabled"].filter(c => typeof p[c] === "function")
+    };
+  });
+  probe("VideoComponentChain: blend mode / opacity candidates", () => {
+    const p = _ppro.VideoComponentChain && _ppro.VideoComponentChain.prototype;
+    return p ? Object.getOwnPropertyNames(p) : "KHÔNG có VideoComponentChain";
+  });
+  probe("Component: setBypass/blendMode candidates trên Component chung", () => {
+    const p = _ppro.Component && _ppro.Component.prototype;
+    if (!p) return "KHÔNG có Component";
+    const cands = ["setBypass", "getBypass", "isEnabled", "setEnabled", "getBlendMode", "setBlendMode"];
+    return cands.filter(c => typeof p[c] === "function");
+  });
+  probe("Exporter own props (video scopes / capture frame liên quan)", () => {
+    const e = _ppro.Exporter;
+    return e ? Object.getOwnPropertyNames(e) : "KHÔNG có Exporter";
+  });
+  probe("C2PAService / ObjectMaskUtils own props (tò mò xem có liên quan scope/mask không)", () => {
+    return {
+      C2PAService: _ppro.C2PAService ? Object.getOwnPropertyNames(_ppro.C2PAService) : null,
+      ObjectMaskUtils: _ppro.ObjectMaskUtils ? Object.getOwnPropertyNames(_ppro.ObjectMaskUtils) : null
+    };
+  });
+  probe("Metadata own props (tìm raw XMP set/get + custom field)", () => {
+    const m = _ppro.Metadata;
+    return m ? Object.getOwnPropertyNames(m) : "KHÔNG có Metadata";
+  });
+  probe("TextSegments own/proto props (MOGRT text?)", () => {
+    const ts = _ppro.TextSegments;
+    const p = ts && ts.prototype;
+    return {
+      own: ts ? Object.getOwnPropertyNames(ts) : null,
+      proto: p ? Object.getOwnPropertyNames(p) : null
+    };
+  });
+  probe("VideoComponentChain: getComponentAtIndex trả gì cho Graphic Group con (drill MOGRT text lại 1 lần nữa)", () => "xem trong selectedClips nếu có chọn MOGRT clip");
 
 
 

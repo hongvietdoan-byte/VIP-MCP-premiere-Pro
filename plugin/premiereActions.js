@@ -1567,27 +1567,22 @@ async function getProjectInfo() {
   return { projectName, projectPath, activeSequence: activeSequenceName, sequences, bins };
 }
 
-async function importFilesToProject({ paths, binName }) {
+async function importFilesToProject({ paths, binName, asNumberedStills = false }) {
   if (!paths || paths.length === 0) throw new Error("Phải truyền ít nhất 1 đường dẫn file.");
   const project = await ppro.Project.getActiveProject();
   if (!project) throw new Error("Không tìm thấy project đang mở.");
 
-  // Tìm bin đích nếu có
+  // Tìm bin đích nếu có — FIX 2026-09-15: cùng bug đã fix ở moveItemToBin (chỉ scan root literal, bỏ
+  // sót bin con) — dùng findProjectItemInBin đệ quy thay vì scan root thủ công.
   let targetBin = null;
   if (binName) {
-    try {
-      const rootItem = await project.getRootItem();
-      const items = (await rootItem.getItems()) || [];
-      for (const child of items) {
-        const name = child.name || (await child.getName());
-        if (name === binName) { targetBin = child; break; }
-      }
-    } catch {}
+    const rootItem = await project.getRootItem();
+    targetBin = await findProjectItemInBin(rootItem, binName);
   }
 
   // importFiles(paths, suppressUI, targetBin, asNumberedStills)
   try {
-    const ok = await project.importFiles(paths, true, targetBin, false);
+    const ok = await project.importFiles(paths, true, targetBin, asNumberedStills);
     return {
       imported: paths.map(p => ({ path: p, name: p.split(/[\\/]/).pop() })),
       skipped: [],
@@ -1597,6 +1592,14 @@ async function importFilesToProject({ paths, binName }) {
   } catch (e) {
     throw new Error(`importFiles thất bại: ${e.message}. Kiểm tra đường dẫn file có đúng không.`);
   }
+}
+
+// import_image_sequence — wrapper mỏng trên importFilesToProject: truyền asNumberedStills:true và
+// CHỈ file đầu tiên của chuỗi ảnh đánh số (vd "frame_0001.png") — Premiere tự nhận diện phần còn lại
+// theo quy ước đánh số cùng thư mục. CHƯA live-test hành vi asNumberedStills:true thật sự.
+async function importImageSequence({ firstFramePath, binName }) {
+  if (!firstFramePath) throw new Error("Phải truyền firstFramePath (đường dẫn file đầu tiên của chuỗi ảnh đánh số).");
+  return await importFilesToProject({ paths: [firstFramePath], binName, asNumberedStills: true });
 }
 
 async function openProject({ path }) {
@@ -5972,4 +5975,946 @@ async function getSourceMonitorClip() {
     itemName: item ? await _safeCall(() => item.name) : null,
     positionSeconds: position ? position.seconds : null
   };
+}
+
+// ============================================================================
+// GROUP 22 — Batch mở rộng đợt 2, 2026-09-15, từ AUDIT_MASTER_TOOL_LIST.md
+// ============================================================================
+// CHƯA LIVE-TEST bất kỳ tool nào trong nhóm này — chờ restart 1 lần tổng thể.
+// Đã xác nhận qua debug_probe_api: KHÔNG có API detachProxy (mọi biến thể tên) và KHÔNG có API
+// "target track" nào (Sequence/VideoTrack/AudioTrack) — bỏ hẳn 2 hạng mục này, không đoán nữa.
+// Application không có cách lấy instance tĩnh — get_version_info vẫn không khả thi.
+
+// --- Timeline analysis (pure computation trên getTrackItemsInRange đã verify, không API mới) ---
+
+async function getTimelineGaps({ trackType = "all", minGapSeconds = 0.05 } = {}) {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  const duration = await sequence.getEndTime();
+  const items = await getTrackItemsInRange(sequence, secondsToTick(0), duration, trackType);
+
+  const byTrack = new Map();
+  for (const i of items) {
+    const key = `${i.trackType}|${i.trackIndex}`;
+    if (!byTrack.has(key)) byTrack.set(key, []);
+    byTrack.get(key).push(i);
+  }
+
+  const gaps = [];
+  for (const [key, list] of byTrack) {
+    list.sort((a, b) => a.itemStart.seconds - b.itemStart.seconds);
+    const [tt, idxStr] = key.split("|");
+    let cursor = 0;
+    for (const item of list) {
+      const gapLen = item.itemStart.seconds - cursor;
+      if (gapLen > minGapSeconds) {
+        gaps.push({ trackType: tt, trackIndex: Number(idxStr), startSeconds: cursor, endSeconds: item.itemStart.seconds, durationSeconds: gapLen });
+      }
+      cursor = Math.max(cursor, item.itemEnd.seconds);
+    }
+  }
+  gaps.sort((a, b) => a.startSeconds - b.startSeconds);
+  return { gaps, count: gaps.length };
+}
+
+async function getNextEditPoint({ fromSeconds, direction = "next", trackType = "all" } = {}) {
+  if (fromSeconds == null) throw new Error("Phải truyền fromSeconds.");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  const duration = await sequence.getEndTime();
+  const items = await getTrackItemsInRange(sequence, secondsToTick(0), duration, trackType);
+
+  const editPoints = new Set();
+  for (const i of items) {
+    editPoints.add(Math.round(i.itemStart.seconds * 1000) / 1000);
+    editPoints.add(Math.round(i.itemEnd.seconds * 1000) / 1000);
+  }
+  const sorted = Array.from(editPoints).sort((a, b) => a - b);
+
+  let result = null;
+  if (direction === "next") {
+    result = sorted.find(t => t > fromSeconds + 0.001);
+  } else {
+    result = [...sorted].reverse().find(t => t < fromSeconds - 0.001);
+  }
+  return { found: result != null, seconds: result != null ? result : null };
+}
+
+// audit_timeline_health — gộp nhiều check đã có (gaps, clip disabled, media offline) thành 1 báo
+// cáo tổng quan, không gọi API mới nào ngoài các hàm đã verify trong file này.
+async function auditTimelineHealth({ trackType = "all" } = {}) {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  const duration = await sequence.getEndTime();
+  const items = await getTrackItemsInRange(sequence, secondsToTick(0), duration, trackType);
+
+  const { gaps } = await getTimelineGaps({ trackType });
+
+  let disabledCount = 0;
+  const offlineItems = [];
+  for (const i of items) {
+    const disabled = await _safeCall(() => i.item.isDisabled());
+    if (disabled) disabledCount++;
+    try {
+      const pi = await i.item.getProjectItem();
+      const cpi = await ppro.ClipProjectItem.cast(pi);
+      if (cpi) {
+        const offline = await _safeCall(() => cpi.isOffline());
+        if (offline) offlineItems.push(await _safeCall(() => cpi.name));
+      }
+    } catch {}
+  }
+
+  return {
+    totalClips: items.length,
+    gapCount: gaps.length,
+    gaps,
+    disabledClipCount: disabledCount,
+    offlineMediaCount: offlineItems.length,
+    offlineMediaNames: offlineItems,
+    healthy: gaps.length === 0 && disabledCount === 0 && offlineItems.length === 0
+  };
+}
+
+// --- Media audit hàng loạt (pure read, quét toàn bộ project item) ---
+
+async function _getAllClipProjectItems(project) {
+  const rootItem = await project.getRootItem();
+  const result = [];
+  async function walk(binItem) {
+    let items;
+    try { items = await binItem.getItems(); } catch { return; }
+    for (const child of (items || [])) {
+      try {
+        const folder = await ppro.FolderItem.cast(child);
+        if (folder) { await walk(folder); continue; }
+      } catch {}
+      try {
+        const cpi = await ppro.ClipProjectItem.cast(child);
+        if (cpi) result.push(cpi);
+      } catch {}
+    }
+  }
+  await walk(rootItem);
+  return result;
+}
+
+async function checkOfflineMedia() {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const allItems = await _getAllClipProjectItems(project);
+  const offline = [];
+  for (const cpi of allItems) {
+    const isOff = await _safeCall(() => cpi.isOffline());
+    if (isOff) offline.push({ name: await _safeCall(() => cpi.name), mediaFilePath: await _safeCall(() => cpi.getMediaFilePath()) });
+  }
+  return { offlineCount: offline.length, totalChecked: allItems.length, offline };
+}
+
+async function getDuplicateMedia() {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const allItems = await _getAllClipProjectItems(project);
+  const byPath = new Map();
+  for (const cpi of allItems) {
+    const path = await _safeCall(() => cpi.getMediaFilePath());
+    if (!path) continue;
+    if (!byPath.has(path)) byPath.set(path, []);
+    byPath.get(path).push(await _safeCall(() => cpi.name));
+  }
+  const duplicates = [];
+  for (const [path, names] of byPath) {
+    if (names.length > 1) duplicates.push({ mediaFilePath: path, itemNames: names, count: names.length });
+  }
+  return { duplicateGroupCount: duplicates.length, duplicates };
+}
+
+// unused_media: item nào KHÔNG xuất hiện trong bất kỳ track item nào của bất kỳ sequence nào.
+// getId() KHÔNG hoạt động trên object đã cast ClipProjectItem (throw lỗi âm thầm, dù có trong
+// prototype ProjectItem — cast không kế thừa như JS prototype chain thường), phải cast NGƯỢC lại
+// về ProjectItem để gọi getId() mới ra giá trị thật. Phát hiện 2026-09-15 qua debug: cpi.getId() qua
+// _safeCall luôn trả null (exception bị nuốt), trong khi ProjectItem thô (từ trackItem.getProjectItem())
+// gọi getId() bình thường.
+async function _getProjectItemId(cpi) {
+  const pi = await ppro.ProjectItem.cast(cpi);
+  return pi ? await _safeCall(() => pi.getId()) : null;
+}
+
+async function getUnusedMedia() {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const allItems = await _getAllClipProjectItems(project);
+  const sequences = await project.getSequences();
+
+  const usedIds = new Set();
+  for (const seq of sequences) {
+    const duration = await _safeCall(() => seq.getEndTime());
+    if (!duration) continue;
+    const trackItems = await getTrackItemsInRange(seq, secondsToTick(0), duration, "all");
+    for (const t of trackItems) {
+      try {
+        const pi = await t.item.getProjectItem();
+        const id = await _safeCall(() => pi.getId());
+        if (id != null) usedIds.add(id);
+      } catch {}
+    }
+  }
+
+  const unused = [];
+  for (const cpi of allItems) {
+    const id = await _getProjectItemId(cpi);
+    if (id == null || !usedIds.has(id)) {
+      unused.push(await _safeCall(() => cpi.name));
+    }
+  }
+  return { unusedCount: unused.length, totalChecked: allItems.length, unused };
+}
+
+// --- Effects nâng cao đợt 2 ---
+
+// AudioFilterFactory.createComponentByDisplayName(displayName, clip) — xác nhận CÓ THẬT (dùng ở
+// setClipPan cho component "Balance"), nhưng đã ghi nhận GIỚI HẠN THẬT: giá trị param của effect
+// audio thêm qua đường này có thể KHÔNG ghi được (xem "set_clip_pan — giới hạn thật" ở trên). Tool
+// này chỉ đảm bảo ÁP ĐƯỢC effect, không đảm bảo chỉnh param sau đó hoạt động.
+async function applyAudioEffect({ displayName }, log) {
+  if (!displayName) throw new Error("Phải truyền displayName (tên hiển thị effect audio, vd \"Balance\").");
+  const { project, clip } = await getActiveSequenceAndSelection(log);
+  const af = ppro.AudioFilterFactory;
+  if (!af || typeof af.createComponentByDisplayName !== "function") {
+    throw new Error("AudioFilterFactory.createComponentByDisplayName không khả dụng trong bản Premiere này.");
+  }
+  // createComponentByDisplayName() KHÔNG được bọc trong lockedAccess() — khác bước append action
+  // ngay dưới. Bọc nhầm (bug live-test 2026-09-15) khiến newComp luôn undefined vì lockedAccess()
+  // không await đúng callback async lồng bên trong theo cách cần thiết ở đây. Giữ nguyên đúng pattern
+  // đã verify ở setClipPan (gọi createComponentByDisplayName ngoài lockedAccess, chỉ bọc executeTransaction).
+  const newComp = await af.createComponentByDisplayName(displayName, clip);
+  if (!newComp) throw new Error(`Không tạo được component audio "${displayName}".`);
+  const chain = await clip.getComponentChain();
+  let added;
+  await project.lockedAccess(() => {
+    added = project.executeTransaction((ca) => {
+      ca.addAction(chain.createAppendComponentAction(newComp));
+    }, `Apply audio effect "${displayName}" qua MCP`);
+  });
+  if (!added) throw new Error("executeTransaction trả về false khi thêm effect audio.");
+  return { applied: true, displayName, warning: "Component đã thêm nhưng chưa xác nhận param có ghi được — xem ghi chú giới hạn set_clip_pan." };
+}
+
+// Xoá effect theo DISPLAY NAME (khác remove_effect hiện có dùng matchName) — tìm component qua
+// getDisplayName() thay vì getMatchName(), tái dùng removeEffect logic bằng cách tự tìm matchName
+// tương ứng rồi gọi lại luồng cũ.
+async function removeEffectByName({ displayName }, log) {
+  if (!displayName) throw new Error("Phải truyền displayName.");
+  const { clip } = await getActiveSequenceAndSelection(log);
+  const found = await findComponentByName(clip, displayName);
+  if (!found) throw new Error(`Không tìm thấy effect có tên hiển thị "${displayName}" trên clip đang chọn.`);
+  const matchName = await found.getMatchName();
+  return await removeEffect({ matchName }, log);
+}
+
+// --- Audio batch ---
+
+// Lặp setClipVolume trên nhiều clip theo range/track — tái dùng hàm đã verify, không API mới.
+async function setClipsVolume({ startSeconds, endSeconds, trackIndex, gainDb, trackType = "audio" } = {}) {
+  if (startSeconds == null || endSeconds == null || trackIndex == null || gainDb == null) {
+    throw new Error("Phải truyền startSeconds, endSeconds, trackIndex, gainDb.");
+  }
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  const items = await getTrackItemsInRange(sequence, secondsToTick(startSeconds), secondsToTick(endSeconds), trackType);
+  const onTrack = items.filter(i => i.trackIndex === trackIndex);
+  if (onTrack.length === 0) throw new Error(`Không tìm thấy clip nào trên ${trackType} track ${trackIndex} trong khoảng ${startSeconds}-${endSeconds}s.`);
+
+  const results = [];
+  for (const i of onTrack) {
+    await sequence.clearSelection();
+    const selectionObj = await _buildSelectionObject(sequence, [i.item]);
+    await sequence.setSelection(selectionObj);
+    try {
+      const r = await setClipVolume({ gainDb }, function () {});
+      results.push({ startSeconds: i.itemStart.seconds, ok: true, result: r });
+    } catch (e) {
+      results.push({ startSeconds: i.itemStart.seconds, ok: false, error: String(e && e.message || e) });
+    }
+  }
+  return { appliedCount: results.filter(r => r.ok).length, total: onTrack.length, results };
+}
+
+// --- Crop (wrapper tiện dụng trên apply_effect + set_effect_param đã có, không API mới) ---
+
+// matchName THẬT là "AE.ADBE AECrop" — "AE.ADBE Crop" (đoán ban đầu) không tồn tại, xác nhận qua
+// search_effects live-test 2026-09-15.
+async function cropClip({ left = 0, top = 0, right = 0, bottom = 0 }, log) {
+  const { clip } = await getActiveSequenceAndSelection(log);
+  const project = await ppro.Project.getActiveProject();
+  const matchName = "AE.ADBE AECrop";
+  await addEffectIfMissing(clip, project, matchName, "Crop", log || function () {});
+  const results = {};
+  for (const [paramName, value] of [["Left", left], ["Top", top], ["Right", right], ["Bottom", bottom]]) {
+    try {
+      results[paramName] = await setEffectParam({ matchName, paramName, value }, log || function () {});
+    } catch (e) {
+      results[paramName] = { error: String(e && e.message || e) };
+    }
+  }
+  return { applied: true, results };
+}
+
+// --- MOGRT nâng cao ---
+
+// SequenceEditor.insertMogrtFromLibrary xác nhận CÓ THẬT trong prototype — chữ ký tham số CHƯA xác
+// nhận (đoán theo insertMogrtFromPath: libraryItemId thay vì path). CHƯA live-test.
+async function importMogrtFromLibrary({ libraryItemId, startSeconds = 0, videoTrackIndex = 2, numAudioTracks = 0 }, log) {
+  if (!libraryItemId) throw new Error("Phải truyền libraryItemId (ID item trong Creative Cloud Library).");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+  const editor = ppro.SequenceEditor.getEditor(sequence);
+  if (!editor || typeof editor.insertMogrtFromLibrary !== "function") {
+    throw new Error("SequenceEditor.insertMogrtFromLibrary không khả dụng.");
+  }
+  let result;
+  await project.lockedAccess(async () => {
+    result = await editor.insertMogrtFromLibrary(libraryItemId, secondsToTick(startSeconds), videoTrackIndex, numAudioTracks);
+  });
+  return { inserted: !!result, libraryItemId, startSeconds, videoTrackIndex };
+}
+
+// --- Color/LUT (đọc: pure getter đã verify tồn tại. Ghi: CHƯA xác nhận định dạng ID LUT thật) ---
+
+async function getClipLut(_params, log) {
+  const { clip } = await getActiveSequenceAndSelection(log);
+  const projectItem = await clip.getProjectItem();
+  const cpi = await ppro.ClipProjectItem.cast(projectItem);
+  if (!cpi) throw new Error("Clip đang chọn không phải clip media hợp lệ.");
+  const [inputLutId, embeddedLutId] = await Promise.all([
+    _safeCall(() => cpi.getInputLUTID()),
+    _safeCall(() => cpi.getEmbeddedLUTID())
+  ]);
+  return { inputLutId, embeddedLutId };
+}
+
+// createSetInputLUTIDAction() — chữ ký THẬT chưa xác nhận (native function không lộ arity). Thử
+// nhiều biến thể tham số khi live-test đợt sau (path tuyệt đối .cube, hoặc ID nội bộ dạng chuỗi) —
+// đây chỉ là bản khung, throw rõ nếu variant đầu thất bại thay vì báo thành công giả.
+async function applyLut({ lutPath }, log) {
+  if (!lutPath) throw new Error("Phải truyền lutPath (đường dẫn file .cube).");
+  const { project, clip } = await getActiveSequenceAndSelection(log);
+  const projectItem = await clip.getProjectItem();
+  const cpi = await ppro.ClipProjectItem.cast(projectItem);
+  if (!cpi) throw new Error("Clip đang chọn không phải clip media hợp lệ.");
+
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(cpi.createSetInputLUTIDAction(lutPath));
+    }, "Apply LUT qua MCP");
+  });
+
+  const after = await _safeCall(() => cpi.getInputLUTID());
+  return { applied: true, lutPath, actualInputLutId: after };
+}
+
+// ============================================================================
+// GROUP 23 — Batch mở rộng đợt 3, 2026-09-15
+// ============================================================================
+// CHƯA LIVE-TEST bất kỳ tool nào trong nhóm này. Xác nhận qua probe: TransitionFactory KHÔNG có API
+// audio transition riêng (chỉ createVideoTransition/getVideoTransitionMatchNames) — không code
+// list_available_audio_transitions. ppro.Transcript có method TĨNH thật (không qua instance):
+// importFromJSON/exportToJSON/hasTranscript/querySupportedLanguages/createImportTextSegmentsAction —
+// KHÁC hẳn giả định ban đầu (tưởng phải qua ClipProjectItem instance, xác nhận KHÔNG có method
+// transcript nào trên ClipProjectItem.prototype).
+
+// set_clip_transform — gộp 5 setter đã verify đúng (position/anchor/scale/rotation/opacity) thành
+// 1 lệnh, không API mới nào ngoài các hàm đã có.
+async function setClipTransform({ x, y, anchorX, anchorY, scalePercent, degrees, opacityPercent }, log) {
+  const results = {};
+  if (x != null && y != null) {
+    try { results.position = await setClipPosition({ x, y }, log); }
+    catch (e) { results.position = { error: String(e && e.message || e) }; }
+  }
+  if (anchorX != null && anchorY != null) {
+    try { results.anchorPoint = await setClipAnchorPoint({ x: anchorX, y: anchorY }, log); }
+    catch (e) { results.anchorPoint = { error: String(e && e.message || e) }; }
+  }
+  if (scalePercent != null) {
+    try { results.scale = await setClipScale({ scalePercent }, log); }
+    catch (e) { results.scale = { error: String(e && e.message || e) }; }
+  }
+  if (degrees != null) {
+    try { results.rotation = await setClipRotation({ degrees }, log); }
+    catch (e) { results.rotation = { error: String(e && e.message || e) }; }
+  }
+  if (opacityPercent != null) {
+    try { results.opacity = await setClipOpacity({ percent: opacityPercent }, log); }
+    catch (e) { results.opacity = { error: String(e && e.message || e) }; }
+  }
+  return results;
+}
+
+// --- Native transcript (ppro.Transcript — static methods, KHÔNG qua ClipProjectItem instance) ---
+
+async function hasTranscriptUxp(_params, log) {
+  const { clip } = await getActiveSequenceAndSelection(log);
+  const projectItem = await clip.getProjectItem();
+  const cpi = await ppro.ClipProjectItem.cast(projectItem);
+  if (!cpi) throw new Error("Clip đang chọn không phải clip media hợp lệ.");
+  if (!ppro.Transcript || typeof ppro.Transcript.hasTranscript !== "function") {
+    throw new Error("ppro.Transcript.hasTranscript không khả dụng trong bản Premiere này.");
+  }
+  const has = await ppro.Transcript.hasTranscript(cpi);
+  return { hasTranscript: !!has };
+}
+
+async function getTranscriptLanguagesUxp() {
+  if (!ppro.Transcript || typeof ppro.Transcript.querySupportedLanguages !== "function") {
+    throw new Error("ppro.Transcript.querySupportedLanguages không khả dụng trong bản Premiere này.");
+  }
+  const languages = await ppro.Transcript.querySupportedLanguages();
+  return { languages };
+}
+
+// exportToJSON(cpi) — chữ ký CHƯA xác nhận (đoán nhận đúng 1 tham số ClipProjectItem giống
+// importFromJSON nhận string). CHƯA live-test.
+async function getClipTranscriptUxp(_params, log) {
+  const { clip } = await getActiveSequenceAndSelection(log);
+  const projectItem = await clip.getProjectItem();
+  const cpi = await ppro.ClipProjectItem.cast(projectItem);
+  if (!cpi) throw new Error("Clip đang chọn không phải clip media hợp lệ.");
+  if (!ppro.Transcript || typeof ppro.Transcript.exportToJSON !== "function") {
+    throw new Error("ppro.Transcript.exportToJSON không khả dụng trong bản Premiere này.");
+  }
+  // KHÔNG live-test được thành công — mọi clip test sẵn có đều hasTranscript:false (ảnh tĩnh, không
+  // audio thoại), nên chưa có clip THẬT có transcript để verify chữ ký đúng. Đã thử 4 biến thể tham
+  // số ((cpi), (cpi,true/false), (projectItem)) trên clip không có transcript — TẤT CẢ đều lỗi
+  // ("Illegal Parameter type"/"Invalid parameter."), không đủ để kết luận biến thể nào đúng vì có thể
+  // bản thân việc export transcript rỗng luôn lỗi bất kể chữ ký. Giữ nguyên bản đơn giản nhất (cpi),
+  // báo lỗi rõ ràng thay vì báo thành công giả — cần test lại với clip có phụ đề/thoại thật + đã chạy
+  // Speech-to-Text trong Premiere trước.
+  const json = await ppro.Transcript.exportToJSON(cpi);
+  let parsed = null;
+  try { parsed = JSON.parse(json); } catch {}
+  return { raw: json, parsed };
+}
+
+// ============================================================================
+// GROUP 24 — Batch mở rộng đợt 4, 2026-09-15
+// ============================================================================
+// Trước khi code, LIVE-TEST (không phải chỉ đọc prototype) trực tiếp createSequenceFromMedia bằng
+// cách tạo 1 sequence test thật từ 1 media item thật rồi xoá ngay — CHỮ KÝ ĐÃ XÁC NHẬN ĐÚNG:
+// project.createSequenceFromMedia(name: string, mediaItems: ClipProjectItem[]) → tạo sequence chứa
+// clip(s) đó. Test: gọi với ["keo BG ingame.mp4"] → sequence mới tăng đúng 1 (4→5), xoá sạch sau đó.
+// importSequences(["path.prproj"]) với path giả ném lỗi (message rỗng — lỗi native dạng string, đúng
+// pattern "Not Enough Parameters"/kiểu lỗi native khác đã biết) — CHƯA xác nhận đủ để kết luận chữ ký
+// đúng/sai, chỉ biết hàm CÓ NHẬN mảng string path mà không ném "Not Enough Parameters" ngay từ đầu.
+// Xác nhận thêm: KHÔNG có API tạo Color Matte/Black Video/Solid nào (Project/VideoFilterFactory/
+// ComponentFactory đều không có candidate) — bỏ hẳn add_color_matte/add_black_video, không khả thi.
+
+async function createSequenceFromMedia({ name, itemNames }) {
+  if (!name) throw new Error("Phải truyền name cho sequence mới.");
+  if (!itemNames || itemNames.length === 0) throw new Error("Phải truyền itemNames (mảng tên project item).");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+
+  const mediaItems = [];
+  const notFound = [];
+  for (const itemName of itemNames) {
+    const item = await findProjectItemByName(project, itemName);
+    if (!item) { notFound.push(itemName); continue; }
+    const cpi = await ppro.ClipProjectItem.cast(item);
+    if (!cpi) { notFound.push(itemName); continue; }
+    mediaItems.push(cpi);
+  }
+  if (mediaItems.length === 0) throw new Error(`Không tìm thấy item nào hợp lệ trong: ${itemNames.join(", ")}`);
+
+  const before = (await project.getSequences()).length;
+  await project.createSequenceFromMedia(name, mediaItems);
+  const after = (await project.getSequences()).length;
+
+  return { created: after > before, name, itemsUsed: mediaItems.length, notFound };
+}
+
+// import_sequences — CHỮ KÝ CHƯA XÁC NHẬN ĐỦ (chỉ biết nhận mảng path string, không ném lỗi tham
+// số sớm với input giả) — cần live-test với 1 file .prproj thật trước khi tin tưởng hoàn toàn.
+// CHƯA XÁC ĐỊNH ĐƯỢC CHỮ KÝ ĐÚNG sau live-test 2026-09-15: gọi (paths) 1 tham số → "Not Enough
+// Parameters" (kiểu mảng path ĐÚNG, nhưng thiếu tham số) — đã thử thêm tham số 2/3
+// (true/false/null/rootItem, các tổ hợp) đều quay lại "Illegal Parameter type". Không tìm ra đúng
+// trong giới hạn hợp lý — dừng đoán, báo lỗi rõ thay vì báo thành công giả. project.importSequences()
+// có thật (xác nhận qua prototype) nhưng chữ ký thật cần tra tài liệu Adobe chính thức hoặc thử thêm.
+async function importSequencesTool({ paths }) {
+  if (!paths || paths.length === 0) throw new Error("Phải truyền ít nhất 1 đường dẫn file .prproj.");
+  throw new Error(
+    "import_sequences: CHƯA xác định được chữ ký tham số đúng của project.importSequences() — đã " +
+    "thử nhiều biến thể, tất cả đều lỗi. Tool này hiện KHÔNG hoạt động, cần điều tra thêm."
+  );
+}
+
+// import_ae_comps — chữ ký CHƯA xác nhận (đoán nhận (path, binName?) giống importFiles, hoặc chỉ
+// (path)). CHƯA live-test.
+async function importAeComps({ path, binName }) {
+  if (!path) throw new Error("Phải truyền path (đường dẫn file .aep).");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  let targetBin = null;
+  if (binName) {
+    const rootItem = await project.getRootItem();
+    targetBin = await findProjectItemInBin(rootItem, binName);
+  }
+  const before = (await _getAllClipProjectItems(project)).length;
+  await project.importAEComps(path, targetBin);
+  const after = (await _getAllClipProjectItems(project)).length;
+  return { importedItemCount: after - before, path };
+}
+
+// ============================================================================
+// GROUP 25 — Batch mở rộng đợt 5, 2026-09-15
+// ============================================================================
+// Xác nhận qua probe: `Component`/`VideoComponentChain` KHÔNG có API bypass/enable/blend-mode nào
+// (chỉ insert/append/remove/getComponentAtIndex/getComponentCount) — bỏ hẳn set_effect_enabled (đã
+// biết từ trước)/set_blend_mode/set_anti_alias_quality, không khả thi qua UXP, không phải chưa tìm ra.
+// `Metadata` có `addPropertyToProjectMetadataSchema` — mở khoá add_custom_metadata_field.
+
+// add_custom_metadata_field — CHƯA live-test (thay đổi schema metadata cấp PROJECT, không dễ "xoá
+// sạch" như sequence test nên chưa live-test phá hoại tuỳ tiện). Chữ ký ĐOÁN theo tên tham số hợp lý
+// (name, type, defaultValue?) — Metadata có sẵn hằng số METADATA_TYPE_INTEGER/REAL/TEXT/BOOLEAN dùng
+// cho tham số type.
+async function addCustomMetadataField({ fieldName, type = "TEXT" }) {
+  if (!fieldName) throw new Error("Phải truyền fieldName.");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  if (!ppro.Metadata || typeof ppro.Metadata.addPropertyToProjectMetadataSchema !== "function") {
+    throw new Error("ppro.Metadata.addPropertyToProjectMetadataSchema không khả dụng trong bản Premiere này.");
+  }
+  const typeMap = {
+    INTEGER: ppro.Metadata.METADATA_TYPE_INTEGER,
+    REAL: ppro.Metadata.METADATA_TYPE_REAL,
+    TEXT: ppro.Metadata.METADATA_TYPE_TEXT,
+    BOOLEAN: ppro.Metadata.METADATA_TYPE_BOOLEAN
+  };
+  const typeValue = typeMap[type];
+  if (typeValue == null) throw new Error(`type không hợp lệ: "${type}". Dùng INTEGER/REAL/TEXT/BOOLEAN.`);
+
+  // CHƯA XÁC ĐỊNH ĐƯỢC CHỮ KÝ ĐÚNG sau live-test 2026-09-15: đã thử (project,name,type) và biến thể
+  // 4 tham số → "Illegal Parameter type"; (name,type) 2 tham số → "Not Enough Parameters" (đúng KIỂU
+  // nhưng thiếu 1 tham số); thử thêm tham số 3 (true/false/project/string "MCP") ở vị trí cuối sau
+  // (name,type) → quay lại "Illegal Parameter type". Không tìm ra kiểu tham số thứ 3 đúng trong giới
+  // hạn hợp lý — dừng đoán, báo lỗi rõ thay vì báo thành công giả. Cần điều tra thêm (có thể cần đọc
+  // tài liệu Adobe chính thức hoặc thử kiểu Guid/object phức tạp hơn) trước khi tin dùng tool này.
+  throw new Error(
+    "add_custom_metadata_field: CHƯA xác định được chữ ký tham số đúng của " +
+    "Metadata.addPropertyToProjectMetadataSchema() — đã thử nhiều biến thể, tất cả đều lỗi " +
+    "\"Illegal Parameter type\"/\"Not Enough Parameters\". Tool này hiện KHÔNG hoạt động, cần điều " +
+    "tra thêm trước khi dùng."
+  );
+}
+
+// create_subsequence — CHỮ KÝ CHƯA XÁC NHẬN (chưa live-test do cần thêm 1 vòng restart riêng chỉ để
+// probe, không đáng công so với giá trị). Đoán theo tên tham số hợp lý: tạo subsequence từ work area
+// (in/out) hiện tại của sequence active — dùng sequence.getInPoint()/getOutPoint() đã có sẵn.
+async function createSubsequenceTool({ name, sequenceName } = {}) {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await _resolveSequenceByName(project, sequenceName);
+  if (!sequence) throw new Error("Không có sequence active và không truyền sequenceName.");
+  const inPoint = await sequence.getInPoint();
+  const outPoint = await sequence.getOutPoint();
+
+  const before = (await project.getSequences()).length;
+  await sequence.createSubsequence(name || `${sequence.name} Subsequence`, inPoint, outPoint);
+  const after = (await project.getSequences()).length;
+  return { created: after > before, name: name || `${sequence.name} Subsequence` };
+}
+
+// ============================================================================
+// GROUP 26 — Batch mở rộng đợt 6 (theo yêu cầu "build tiếp theo danh sách sheet"), 2026-09-15
+// ============================================================================
+// CHƯA LIVE-TEST bất kỳ tool nào trong nhóm này. Dựng trên hạ tầng ĐÃ VERIFY trong file (không gọi
+// API native mới nào ngoài những gì đã probe/dùng ở trên) — rủi ro chủ yếu ở logic gộp, không phải ở
+// tầng API. Xác nhận thêm qua probe cuối cùng: ScratchDiskSettings/IngestSettings/Workspace/Poster
+// Frame/Color Space đều KHÔNG có entry point sử dụng được từ Project — bỏ hẳn các tool liên quan
+// (get/set_project_scratch_disk, set_transcode_on_ingest, get/set_workspace, set_poster_frame,
+// get_color_space), không phải chưa tìm ra.
+
+// --- Caption/Transcript nâng cao ---
+
+async function inspectCaptionTracksUxp({ sequenceName } = {}) {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await _resolveSequenceByName(project, sequenceName);
+  if (!sequence) throw new Error("Không có sequence active và không truyền sequenceName.");
+
+  const count = await sequence.getCaptionTrackCount();
+  const tracks = [];
+  for (let i = 0; i < count; i++) {
+    const track = await sequence.getCaptionTrack(i);
+    const items = await _safeCall(() => track.getTrackItems(ppro.Constants.TrackItemType.CLIP, false));
+    tracks.push({
+      index: i,
+      name: await _safeCall(() => track.name),
+      muted: await _safeCall(() => track.isMuted()),
+      itemCount: items ? items.length : null
+    });
+  }
+  return { trackCount: count, tracks };
+}
+
+// import_transcript_uxp — biến thể "chuẩn" dùng Transcript.importFromJSON + createImportTextSegmentsAction
+// (khác import_transcript_json thử nghiệm cũ) — CÙNG hạ tầng, đặt tên rõ ràng theo audit list. CHƯA
+// live-test do get_clip_transcript_uxp (export, để đối chiếu) chưa xác nhận hoạt động.
+async function importTranscriptUxp({ segments }, log) {
+  return await importTranscriptJson({ segments }, log);
+}
+
+// --- Selection nâng cao đợt 2 ---
+
+async function selectClipsByColor({ colorLabelIndex, trackType = "all" } = {}) {
+  if (colorLabelIndex == null) throw new Error("Phải truyền colorLabelIndex.");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  const duration = await sequence.getEndTime();
+  const allItems = await getTrackItemsInRange(sequence, secondsToTick(0), duration, trackType);
+  const matched = [];
+  for (const i of allItems) {
+    const projectItem = await _safeCall(() => i.item.getProjectItem());
+    if (!projectItem) continue;
+    const idx = await _safeCall(() => projectItem.getColorLabelIndex());
+    if (idx === colorLabelIndex) matched.push(i.item);
+  }
+
+  await sequence.clearSelection();
+  if (matched.length > 0) {
+    const selectionObj = await _buildSelectionObject(sequence, matched);
+    await sequence.setSelection(selectionObj);
+  }
+  return { selected: matched.length };
+}
+
+// --- Batch clip editing (lặp tool đơn lẻ đã verify, qua cơ chế chọn từng clip 1 giống setClipsVolume) ---
+
+async function _forEachClipInRange({ startSeconds, endSeconds, trackIndex, trackType = "video" }, fn) {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  const items = await getTrackItemsInRange(sequence, secondsToTick(startSeconds), secondsToTick(endSeconds), trackType);
+  const onTrack = trackIndex != null ? items.filter(i => i.trackIndex === trackIndex) : items;
+  if (onTrack.length === 0) throw new Error(`Không tìm thấy clip nào trong khoảng ${startSeconds}-${endSeconds}s.`);
+
+  const results = [];
+  for (const i of onTrack) {
+    await sequence.clearSelection();
+    const selectionObj = await _buildSelectionObject(sequence, [i.item]);
+    await sequence.setSelection(selectionObj);
+    try {
+      const r = await fn(i);
+      results.push({ startSeconds: i.itemStart.seconds, ok: true, result: r });
+    } catch (e) {
+      results.push({ startSeconds: i.itemStart.seconds, ok: false, error: String(e && e.message || e) });
+    }
+  }
+  return results;
+}
+
+async function batchRenameClips({ startSeconds, endSeconds, trackIndex, trackType = "video", newNamePrefix }) {
+  if (!newNamePrefix) throw new Error("Phải truyền newNamePrefix.");
+  let counter = 1;
+  const results = await _forEachClipInRange({ startSeconds, endSeconds, trackIndex, trackType }, async () => {
+    const r = await renameClip({ newName: `${newNamePrefix} ${counter}` }, function () {});
+    counter++;
+    return r;
+  });
+  return { renamedCount: results.filter(r => r.ok).length, total: results.length, results };
+}
+
+async function batchEnableDisableClip({ startSeconds, endSeconds, trackIndex, trackType = "video", enabled }) {
+  if (enabled == null) throw new Error("Phải truyền enabled (true/false).");
+  const results = await _forEachClipInRange({ startSeconds, endSeconds, trackIndex, trackType }, async () => {
+    return await enableDisableClip({ enabled }, function () {});
+  });
+  return { appliedCount: results.filter(r => r.ok).length, total: results.length, results };
+}
+
+async function setClipPropertiesBatch({ startSeconds, endSeconds, trackIndex, trackType = "video", ...transformParams }) {
+  const results = await _forEachClipInRange({ startSeconds, endSeconds, trackIndex, trackType }, async () => {
+    return await setClipTransform(transformParams, function () {});
+  });
+  return { appliedCount: results.filter(r => r.ok).length, total: results.length, results };
+}
+
+// copy_effect_values — copy CẢ effect lẫn GIÁ TRỊ param hiện tại (khác copy_effects_between_clips chỉ
+// copy việc áp effect) — đọc value qua getEffectProperties-style, ghi qua setEffectParam đã verify.
+async function copyEffectValues({ targetStartSeconds, targetTrackIndex, targetTrackType = "video" }, log) {
+  if (targetStartSeconds == null || targetTrackIndex == null) {
+    throw new Error("Phải truyền targetStartSeconds và targetTrackIndex (clip đích).");
+  }
+  const { clip: sourceClip } = await getActiveSequenceAndSelection(log);
+  const chain = await sourceClip.getComponentChain();
+  const count = await chain.getComponentCount();
+  const atTick = await sourceClip.getInPoint();
+
+  const effectsToApply = [];
+  for (let idx = 0; idx < count; idx++) {
+    const comp = await chain.getComponentAtIndex(idx);
+    const mn = await comp.getMatchName();
+    if (mn === "AE.ADBE Motion" || mn === "AE.ADBE Opacity") continue;
+    const paramCount = await comp.getParamCount();
+    const paramValues = [];
+    for (let p = 0; p < paramCount; p++) {
+      const param = await comp.getParam(p);
+      let value = null;
+      try { value = unwrapParamValue(await param.getValueAtTime(atTick)); } catch {}
+      paramValues.push({ paramName: param.displayName, value });
+    }
+    effectsToApply.push({ matchName: mn, paramValues });
+  }
+
+  const project = await ppro.Project.getActiveProject();
+  const sequence = await project.getActiveSequence();
+  const items = await getTrackItemsInRange(sequence, secondsToTick(targetStartSeconds), secondsToTick(targetStartSeconds + 0.01), targetTrackType);
+  const targetItem = items.find(i => i.trackIndex === targetTrackIndex);
+  if (!targetItem) throw new Error(`Không tìm thấy clip đích trên ${targetTrackType} track ${targetTrackIndex} tại ${targetStartSeconds}s.`);
+
+  await sequence.clearSelection();
+  const selectionObj = await _buildSelectionObject(sequence, [targetItem.item]);
+  await sequence.setSelection(selectionObj);
+
+  const results = [];
+  for (const eff of effectsToApply) {
+    try {
+      await addEffectIfMissing(targetItem.item, project, eff.matchName, eff.matchName, log || function () {});
+      for (const pv of eff.paramValues) {
+        if (pv.value == null || typeof pv.value === "object") continue; // bỏ qua param không đọc được giá trị đơn giản (vd color/point phức tạp)
+        try {
+          await setEffectParam({ matchName: eff.matchName, paramName: pv.paramName, value: pv.value }, log || function () {});
+        } catch {}
+      }
+      results.push({ matchName: eff.matchName, ok: true, paramsCopied: eff.paramValues.length });
+    } catch (e) {
+      results.push({ matchName: eff.matchName, ok: false, error: String(e && e.message || e) });
+    }
+  }
+  return { copiedCount: results.filter(r => r.ok).length, total: effectsToApply.length, results };
+}
+
+// --- Project overview / navigation ---
+
+async function getFullProjectOverview() {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequences = await project.getSequences();
+  const activeSequence = await project.getActiveSequence();
+  const allItems = await _getAllClipProjectItems(project);
+
+  return {
+    projectName: project.name,
+    projectPath: project.path,
+    sequenceCount: sequences.length,
+    sequenceNames: sequences.map(s => s.name),
+    activeSequenceName: activeSequence ? activeSequence.name : null,
+    totalMediaItemCount: allItems.length
+  };
+}
+
+async function movePlayheadToEdit({ direction = "next", trackType = "all" } = {}) {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+  const current = (await sequence.getPlayerPosition()).seconds;
+  const next = await getNextEditPoint({ fromSeconds: current, direction, trackType });
+  if (!next.found) return { moved: false, reason: "Không có edit point nào theo hướng đã chọn." };
+
+  const r = await setPlayheadPosition({ seconds: next.seconds });
+  return { moved: true, seconds: r.actualSeconds };
+}
+
+// --- Media replace / Source Monitor nâng cao ---
+
+// replace_clip — thay PROJECT ITEM của 1 clip trên timeline nhưng GIỮ NGUYÊN vị trí+duration (khác
+// replace_clip_media đổi media gốc của item hiện có) — thực hiện bằng xoá clip cũ rồi chèn item mới
+// đúng vị trí/duration cũ, tái dùng insertOrOverwriteClip (mode overwrite) đã verify.
+async function replaceClip({ startSeconds, trackIndex, trackType = "video", newItemName }, log) {
+  if (startSeconds == null || trackIndex == null || !newItemName) {
+    throw new Error("Phải truyền startSeconds, trackIndex, newItemName.");
+  }
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  const items = await getTrackItemsInRange(sequence, secondsToTick(startSeconds), secondsToTick(startSeconds + 0.01), trackType);
+  const target = items.find(i => i.trackIndex === trackIndex);
+  if (!target) throw new Error(`Không tìm thấy clip trên ${trackType} track ${trackIndex} tại ${startSeconds}s.`);
+  const oldStart = target.itemStart.seconds;
+  const oldDuration = target.itemEnd.seconds - target.itemStart.seconds;
+
+  await sequence.clearSelection();
+  const selectionObj = await _buildSelectionObject(sequence, [target.item]);
+  await sequence.setSelection(selectionObj);
+  await removeSelectedClips({ ripple: false }, log || function () {});
+
+  const result = await insertOrOverwriteClip({
+    itemName: newItemName, startSeconds: oldStart,
+    videoTrackIndex: trackType === "video" ? trackIndex : 0,
+    audioTrackIndex: trackType === "audio" ? trackIndex : 0,
+    durationSeconds: oldDuration, mode: "overwrite"
+  }, log || function () {});
+
+  return { replaced: true, newItemName, startSeconds: oldStart, durationSeconds: oldDuration, result };
+}
+
+// set_source_in_out — set in/out cho item ĐANG MỞ trong Source Monitor, tái dùng setItemInOut đã
+// verify đúng chữ ký (TickTime,TickTime) — chỉ cần tìm đúng tên item đang mở.
+async function setSourceInOut({ inSeconds, outSeconds }) {
+  if (inSeconds == null || outSeconds == null) throw new Error("Phải truyền inSeconds và outSeconds.");
+  const item = await _safeCall(() => ppro.SourceMonitor.getProjectItem());
+  if (!item) throw new Error("Source Monitor hiện không mở item nào. Dùng open_in_source_monitor trước.");
+  const itemName = await _safeCall(() => item.name);
+  if (!itemName) throw new Error("Không đọc được tên item đang mở trong Source Monitor.");
+  return await setItemInOut({ itemName, inSeconds, outSeconds });
+}
+
+// --- Editing precision nâng cao ---
+
+// stabilize_clip — áp Warp Stabilizer (matchName xác nhận qua search_effects khi live-test) lên clip
+// đang chọn. LƯU Ý: Warp Stabilizer cần PHÂN TÍCH (analyze) trước khi thật sự ổn định hình — Premiere
+// tự chạy phân tích nền sau khi áp qua UI, nhưng CHƯA xác nhận việc áp qua UXP có tự trigger phân
+// tích hay không. matchName dùng "AE.ADBE Warp Stabilizer" — CHƯA xác nhận đúng, cần search_effects
+// live để chắc chắn (cùng bài học crop_clip: đừng đoán, luôn search_effects trước).
+async function stabilizeClip(_params, log) {
+  const { clip } = await getActiveSequenceAndSelection(log);
+  const project = await ppro.Project.getActiveProject();
+  const matchName = "AE.ADBE Warp Stabilizer";
+  const comp = await addEffectIfMissing(clip, project, matchName, "Warp Stabilizer", log || function () {});
+  return {
+    applied: !!comp, matchName,
+    warning: "Warp Stabilizer cần thời gian PHÂN TÍCH sau khi áp (Premiere tự chạy nền) — chưa xác nhận trigger qua UXP có hoạt động như qua UI hay không. Kiểm tra get_clip_effects để xác nhận effect đã áp, và tự mở Premiere xem tiến trình phân tích."
+  };
+}
+
+// match_frame — mở Source Monitor tại đúng thời điểm NGUỒN tương ứng với vị trí playhead trên clip.
+async function matchFrame({ trackIndex = 0, trackType = "video" } = {}) {
+  const atPlayhead = await getClipAtPlayhead({ trackIndex, trackType });
+  if (!atPlayhead.found) throw new Error("Không có clip nào tại vị trí playhead trên track chỉ định.");
+  const project = await ppro.Project.getActiveProject();
+  const item = await findProjectItemByName(project, atPlayhead.name);
+  if (!item) throw new Error(`Không tìm thấy project item "${atPlayhead.name}".`);
+  await ppro.SourceMonitor.openProjectItem(item);
+  // Vị trí trong nguồn = offset trong clip + inPoint gốc — xấp xỉ bằng cách lấy playhead trừ start clip.
+  const sequence = await project.getActiveSequence();
+  const playhead = (await sequence.getPlayerPosition()).seconds;
+  const offsetInClip = playhead - atPlayhead.startSeconds;
+  return { opened: true, itemName: atPlayhead.name, offsetInClipSeconds: offsetInClip };
+}
+
+// --- Metadata raw ---
+
+// set_xmp_metadata — GHI ĐÈ TOÀN BỘ XMP thô (khác set_clip_metadata chỉ merge field dc: cụ thể) —
+// dùng trực tiếp createSetXMPMetadataAction với string XMP người dùng tự cung cấp đầy đủ.
+async function setXmpMetadataRaw({ xmpString }, log) {
+  if (!xmpString) throw new Error("Phải truyền xmpString (nội dung XMP đầy đủ).");
+  const { project, clip } = await getActiveSequenceAndSelection(log);
+  const projectItem = await clip.getProjectItem();
+  if (!ppro.Metadata || typeof ppro.Metadata.createSetXMPMetadataAction !== "function") {
+    throw new Error("ppro.Metadata.createSetXMPMetadataAction không khả dụng.");
+  }
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(ppro.Metadata.createSetXMPMetadataAction(projectItem, xmpString));
+    }, "Set XMP raw qua MCP");
+  });
+  return { set: true };
+}
+
+// --- Footage interpretation override riêng (khác createSetFootageInterpretationAction đã dùng ở
+// set_footage_interpretation) — createSetOverrideFrameRateAction/createSetOverridePixelAspectRatioAction
+// xác nhận CÓ THẬT qua probe nhưng CHƯA live-test, có thể là đường thay thế đáng tin hơn nếu
+// FootageInterpretation object-mutation-pattern gặp lại vấn đề. ---
+
+async function setOverrideFrameRate({ itemName, frameRate }) {
+  if (!itemName) throw new Error("Phải truyền itemName.");
+  if (frameRate == null) throw new Error("Phải truyền frameRate.");
+  const { project, cpi } = await getClipProjectItemByName(itemName);
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(cpi.createSetOverrideFrameRateAction(frameRate));
+    }, "Set override frame rate qua MCP");
+  });
+  return { itemName, frameRate };
+}
+
+async function setOverridePixelAspectRatio({ itemName, pixelAspectRatio }) {
+  if (!itemName) throw new Error("Phải truyền itemName.");
+  if (pixelAspectRatio == null) throw new Error("Phải truyền pixelAspectRatio.");
+  const parString = String(pixelAspectRatio).includes(":") ? String(pixelAspectRatio) : `${pixelAspectRatio}:1`;
+  const { project, cpi } = await getClipProjectItemByName(itemName);
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(cpi.createSetOverridePixelAspectRatioAction(parString));
+    }, "Set override pixel aspect ratio qua MCP");
+  });
+  return { itemName, pixelAspectRatio: parString };
+}
+
+// --- Audio phân tích ---
+
+// analyze_loudness — KHÔNG PHẢI EBU R128 LUFS thật (cần K-weighting filter phức tạp, ngoài phạm vi
+// nhanh gọn) — chỉ tính PEAK dBFS + RMS dBFS xấp xỉ trên toàn clip, tái dùng decodeAudioBuffer đã có
+// từ detect_silence_regions. Ghi rõ giới hạn trong kết quả trả về để không gây hiểu nhầm là LUFS chuẩn.
+async function analyzeLoudness(_params, log) {
+  const { clip } = await getActiveSequenceAndSelection(log);
+  const { buffer } = await getAudioBufferForClip(clip, log);
+  const uint8 = new Uint8Array(buffer);
+  const { samples } = await decodeAudioBuffer(uint8);
+
+  let peak = 0;
+  let sumSquares = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const abs = Math.abs(samples[i]);
+    if (abs > peak) peak = abs;
+    sumSquares += samples[i] * samples[i];
+  }
+  const rms = Math.sqrt(sumSquares / samples.length);
+  const peakDb = peak > 0 ? 20 * Math.log10(peak) : -Infinity;
+  const rmsDb = rms > 0 ? 20 * Math.log10(rms) : -Infinity;
+
+  return {
+    peakDb: Math.round(peakDb * 100) / 100,
+    rmsDb: Math.round(rmsDb * 100) / 100,
+    warning: "Đây là PEAK/RMS dBFS xấp xỉ, KHÔNG PHẢI chuẩn EBU R128 LUFS thật (cần bộ lọc K-weighting phức tạp hơn, chưa implement) — chỉ dùng tham khảo tương đối, không dùng để đạt chuẩn phát sóng chính thức."
+  };
+}
+
+// --- Project panel selection (đọc, KHÔNG có API set — chỉ ProjectItemSelection.getItems() tồn tại) ---
+
+async function getProjectPanelSelection() {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  if (!ppro.ProjectUtils || typeof ppro.ProjectUtils.getSelection !== "function") {
+    throw new Error("ppro.ProjectUtils.getSelection không khả dụng trong bản Premiere này.");
+  }
+  const selection = await ppro.ProjectUtils.getSelection(project);
+  if (!selection) return { items: [] };
+  const items = await _safeCall(() => selection.getItems());
+  const names = [];
+  for (const it of (items || [])) {
+    names.push(await _safeCall(() => it.name));
+  }
+  return { items: names };
 }

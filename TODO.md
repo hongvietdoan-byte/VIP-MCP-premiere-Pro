@@ -2,6 +2,248 @@
 
 Cập nhật lần cuối: 2026-09-15. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
+## 🔨 19 tool mới ĐỢT 6 — ĐÃ CODE, CHỜ RESTART (2026-09-15) — batch cuối cùng theo yêu cầu "build hết danh sách sheet"
+
+Theo yêu cầu build ~50 tool 1 lượt: sau khi rà kỹ toàn bộ phần còn lại của `AUDIT_MASTER_TOOL_LIST.md`
++ sheet, xác nhận **phần lớn "giếng" tool khả thi-dễ đã cạn** sau 5 đợt trước — rất nhiều mục còn lại
+rơi vào 1 trong 4 nhóm: (1) đã xác nhận không khả thi qua UXP (workspace, scratch disk, ingest
+settings, poster frame, color space — probe lần cuối xác nhận `Project` KHÔNG có getter/setter nào
+gắn vào các class `ScratchDiskSettings`/`IngestSettings` dù bản thân class đó có method thật), (2) cần
+công cụ ngoài UXP (FFmpeg cho video/scene analysis), (3) là tính năng lớn chứ không phải 1 tool (group
+17 AI editorial), (4) mutating quá rủi ro nếu không có cách hoàn tác rõ ràng (consolidate_duplicates).
+
+⚠️ **Sự cố nhỏ trong lúc chuẩn bị test `create_subsequence`**: lỡ đổi `set_sequence_in_out_points`
+trên sequence THẬT "VN - WAG - BOOYAH-" (quên chuyển sang sequence test trước) — đã set lại về sentinel
+`-400000/-400000` ("chưa đặt work area") ngay lập tức, nhiều khả năng đúng trạng thái gốc nhưng KHÔNG
+chắc chắn 100%. Đã báo user kiểm tra lại work area sequence này. Bài học: LUÔN xác nhận đã chuyển sang
+sequence test bằng `set_active_sequence` XONG rồi mới gọi bất kỳ tool ghi nào, không giả định.
+
+**19 tool mới** (`plugin/premiereActions.js` GROUP 26):
+- `create_subsequence` — chữ ký đoán theo `sequence.getInPoint()/getOutPoint()` hiện có, CHƯA live-test
+  (bỏ qua vòng probe riêng vì cần restart chỉ để xác nhận 1 API, không đáng công).
+- Caption/Transcript: `inspect_caption_tracks_uxp` (rủi ro thấp, pure read), `import_transcript_uxp`
+  (alias `import_transcript_json` đã có, đặt tên theo audit list).
+- Selection: `select_clips_by_color`.
+- Batch clip editing (lặp tool đơn đã verify qua cơ chế chọn-từng-clip giống `set_clips_volume`):
+  `batch_rename_clips`, `batch_enable_disable_clip`, `set_clip_properties_batch`.
+- Effects: `copy_effect_values` (copy CẢ giá trị param, khác `copy_effects_between_clips` chỉ copy việc
+  áp effect).
+- Project/Navigation: `get_full_project_overview`, `move_playhead_to_edit`, `get_project_panel_selection`
+  (đọc qua `ProjectUtils.getSelection` — chỉ đọc, KHÔNG có API set tương ứng nên không làm được
+  `select_item` ghi).
+- Media: `replace_clip` (thay item giữ nguyên vị trí/duration, khác `replace_clip_media`), `set_source_in_out`.
+- Editing nâng cao: `stabilize_clip` (matchName `AE.ADBE Warp Stabilizer` CHƯA xác nhận qua
+  search_effects — theo đúng bài học `crop_clip`, cần search_effects live trước khi tin), `match_frame`.
+- Metadata: `set_xmp_metadata` (ghi đè RAW toàn bộ, khác `set_clip_metadata` chỉ merge field).
+- Footage interpretation thay thế: `set_override_frame_rate`, `set_override_pixel_aspect_ratio` (dùng
+  `createSetOverrideFrameRateAction`/`createSetOverridePixelAspectRatioAction` riêng biệt — có thể là
+  đường đáng tin hơn `set_footage_interpretation` nếu gặp lại vấn đề).
+- Audio: `analyze_loudness` — **KHÔNG PHẢI EBU R128 LUFS thật** (chỉ Peak/RMS dBFS xấp xỉ, thiếu
+  K-weighting filter) — đã ghi rõ cảnh báo trong description tool, không được dùng cho chuẩn phát sóng.
+
+**Cần restart app Claude 1 lần** để nạp 19 schema mới trước khi live-test.
+
+## ✅ LIVE-TEST đợt 3+4+5 xong — 5/9 đúng, 3 xác nhận chữ ký sai chưa tìm ra, 1 chưa đủ data test (2026-09-15)
+
+Live-test trên sequence test riêng (`MCP ToolTest5 2026-09-15`, đã xoá) + 1 chuỗi ảnh đánh số tự tạo
+(`frame_0001-0005.png`, đã xoá) + 1 file `.prproj` thật có sẵn trong project (`Test MCP.prproj`, khác
+project đang mở, chỉ dùng để đọc/import không sửa gì).
+
+**Đúng và verify đầy đủ, 5/9**:
+- `create_sequence_from_media` — verify qua `get_sequence_count`/`get_full_sequence_info`, cả 3 item
+  đúng vào sequence mới.
+- `set_clip_transform` — verify qua `get_clip_transform`, cả 5 field (position/scale/rotation/
+  opacity) khớp đúng.
+- `get_transcript_languages_uxp` — trả về đúng 18 ngôn ngữ thật Premiere hỗ trợ.
+- `has_transcript_uxp` — đúng (`false` trên clip ảnh tĩnh không transcript).
+- `import_image_sequence` — verify qua `get_file_metadata`: `durationSeconds` ra `0.1668` ≈ đúng 5
+  frame ở 30fps (khác hẳn still image thường ra `43200`s) — xác nhận `asNumberedStills:true` gộp đúng
+  5 ảnh đánh số thành 1 clip video.
+
+**🔴 3 tool XÁC NHẬN chữ ký sai, KHÔNG tìm ra chữ ký đúng dù đã thử nhiều biến thể — để nguyên báo lỗi
+rõ ràng thay vì đoán tiếp**:
+- `get_clip_transcript_uxp` (`Transcript.exportToJSON`) — thử `(cpi)`, `(cpi,true/false)`,
+  `(projectItem)` đều lỗi. Không loại trừ khả năng lỗi do clip test KHÔNG có transcript thật (mọi
+  clip test đều `hasTranscript:false`) chứ không hẳn sai chữ ký — cần test lại với clip có transcript
+  thật (đã chạy Speech-to-Text trong Premiere) mới kết luận chắc chắn được.
+- `import_sequences` (`Project.importSequences`) — gọi `(paths)` 1 tham số → "Not Enough Parameters"
+  (đúng KIỂU tham số 1, thiếu tham số khác); thử thêm `true`/`false`/`null`/`rootItem` ở vị trí 2-3 đều
+  → "Illegal Parameter type". Đã thử với file `.prproj` THẬT (`Test MCP.prproj`), không phải path giả.
+- `add_custom_metadata_field` (`Metadata.addPropertyToProjectMetadataSchema`) — gọi
+  `(project,name,type)` → "Illegal Parameter type"; gọi `(name,type)` 2 tham số → "Not Enough
+  Parameters" (đúng KIỂU, thiếu 1 tham số); thử thêm tham số 3 (`true/false/project/"MCP"`) đều quay
+  lại "Illegal Parameter type". Không tìm ra kiểu tham số thứ 3 đúng.
+
+**🟡 `import_ae_comps` — không đủ data để kết luận**: không có file `.aep` thật trong máy để test, gọi
+với path giả ra "Illegal Parameter type" nhưng không phân biệt được là do sai chữ ký hay do file
+không tồn tại. Cần file `.aep` thật để test lại.
+
+**Bài học đợt này**: phân biệt được 2 loại lỗi "Illegal Parameter type" (sai KIỂU tham số ở vị trí đó)
+và "Not Enough Parameters" (đúng kiểu các tham số đã truyền, nhưng THIẾU tham số) rất hữu ích để thu
+hẹp phạm vi đoán — nhưng khi đã thử hết các biến thể hợp lý (boolean/null/object liên quan) mà vẫn
+không ra, nên DỪNG đoán và báo lỗi trung thực thay vì tiếp tục đoán vô hạn định, để dành công sức cho
+việc tra tài liệu Adobe chính thức hoặc thử nghiệm có định hướng hơn sau này.
+
+## 🔨 1 tool mới ĐỢT 5 + nhiều xác nhận KHÔNG khả thi quan trọng (2026-09-15)
+
+Probe sâu thêm nhóm Motion/Transform nâng cao, Color, Metadata raw, MOGRT text (lần thứ 2), video
+scopes. Kết quả chủ yếu là **xác nhận không khả thi** — giá trị thật vẫn cao vì tránh lãng phí công
+điều tra lại sau này:
+
+- **Xác nhận KHÔNG có API** bypass/enable/blend-mode trên `Component` lẫn `VideoComponentChain` (chỉ
+  có insert/append/remove/getComponentAtIndex/getComponentCount) — bỏ hẳn `set_blend_mode`/
+  `set_anti_alias_quality` (cùng với `set_effect_enabled` đã biết từ trước), không khả thi qua UXP.
+- **Không tìm thêm được đường nào cho MOGRT text**: `TextSegments` (class tĩnh với `importFromJSON`/
+  `exportToJSON`) tồn tại nhưng không có API nào kết nối rõ ràng tới Graphic Group component của MOGRT
+  — không đủ bằng chứng để code, giữ nguyên kết luận cũ "giới hạn hệ sinh thái".
+- `Exporter` chỉ có `exportSequenceFrame` (đã dùng cho `capture_frame` có sẵn) — không có API đọc
+  waveform/vectorscope/parade nào khác → `read_video_scopes` tiếp tục không khả thi qua UXP thuần,
+  cần render frame ra ảnh rồi phân tích pixel bên ngoài (ngoài phạm vi UXP).
+- **Phát hiện mới**: `Metadata.addPropertyToProjectMetadataSchema` — API thêm field metadata tuỳ
+  chỉnh cấp PROJECT (khác XMP field-based đã có ở `set_clip_metadata`). Cũng có `getProjectMetadata`/
+  `createSetProjectMetadataAction`/`getProjectPanelMetadata` (project-level metadata, chưa dùng đợt
+  này, để dành nếu cần sau).
+
+**1 tool mới**: `add_custom_metadata_field` — CHƯA live-test (thay đổi schema metadata cấp PROJECT,
+không dễ dọn sạch như sequence test nên chưa live-test phá hoại tuỳ tiện; chữ ký tham số đoán theo
+tên hợp lý, dùng hằng số `METADATA_TYPE_*` có sẵn).
+
+**Nhận định sau 5 đợt liên tiếp**: phần lớn tool "dễ" (API tồn tại rõ ràng, ít rủi ro) đã cài hết.
+Phần còn lại trong `AUDIT_MASTER_TOOL_LIST.md` chủ yếu rơi vào 1 trong 3 nhóm: (1) cần công cụ ngoài
+UXP (FFmpeg cho video/scene analysis, đọc pixel cho video scopes), (2) là cả 1 tính năng lớn chứ
+không phải 1 tool đơn giản (group 17 AI editorial plan→preview→apply), (3) đã xác nhận không khả thi
+qua UXP (blend mode, bypass effect, MOGRT text, color matte, target track, detach proxy...). Nên cân
+nhắc dừng "code hàng loạt" ở đây, restart + live-test toàn bộ các batch đang chờ trước khi đào tiếp.
+
+## 🔨 3 tool mới ĐỢT 4 — ĐÃ CODE + 1 chữ ký LIVE-TEST XÁC NHẬN ĐÚNG NGAY LÚC PROBE (2026-09-15)
+
+Trước khi code, live-test TRỰC TIẾP (không chỉ đọc prototype) `createSequenceFromMedia` bằng cách gọi
+thật với 1 media item thật rồi xoá sequence tạo ra ngay — **xác nhận chữ ký đúng**:
+`project.createSequenceFromMedia(name: string, mediaItems: ClipProjectItem[])`. Test: gọi với
+`["keo BG ingame.mp4"]` → số sequence tăng đúng 1 (4→5), xoá sạch ngay sau khi xác nhận.
+
+**⚠️ Lưu ý cách làm**: block live-test này ban đầu bị lỡ chèn nhầm vào `debug_probe_api` (tool đang
+được document là "CHỈ ĐỌC") — đã phát hiện và dọn sạch ngay sau khi xác nhận xong, không để lại tác
+dụng phụ ghi trong tool debug. Bài học: khi cần live-test 1 API MUTATING để xác nhận chữ ký, PHẢI làm
+trong 1 tool riêng có dọn dẹp rõ ràng, không lồng vào tool debug read-only.
+
+Cũng xác nhận thêm: **KHÔNG có API tạo Color Matte/Black Video/Solid nào** (probe `Project`/
+`VideoFilterFactory`/`ComponentFactory` đều không có candidate phù hợp) — bỏ hẳn `add_color_matte`/
+`add_black_video`/`add_universal_counting_leader`, không khả thi qua UXP.
+
+**3 tool mới**:
+- `create_sequence_from_media` — chữ ký ĐÃ xác nhận đúng như trên, rủi ro thấp.
+- `import_sequences` — nhận mảng path `.prproj`, gọi với path giả không ném lỗi tham số sớm (chỉ ném
+  lỗi runtime message rỗng) nên CHƯA đủ để khẳng định chữ ký đúng hoàn toàn — cần test với file
+  `.prproj` thật.
+- `import_ae_comps` — chữ ký đoán theo `importFiles` (path, targetBin) — CHƯA live-test.
+
+**Cần restart app Claude 1 lần** để nạp 3 schema mới trước khi live-test `import_sequences`/
+`import_ae_comps` (2 tool còn lại chưa xác nhận đủ) — `create_sequence_from_media` coi như đã verify
+đủ tin cậy từ bước probe, nhưng vẫn nên chạy qua tool chính thức 1 lần cho chắc.
+
+## 🔨 6 tool mới ĐỢT 3 — ĐÃ CODE, CHỜ RESTART ĐỂ LIVE-TEST (2026-09-15)
+
+Trước khi code, probe thêm:
+- **Xác nhận** `TransitionFactory` KHÔNG có API audio transition riêng (chỉ `createVideoTransition`/
+  `getVideoTransitionMatchNames`) — bỏ hẳn `list_available_audio_transitions`, không khả thi.
+- **Phát hiện quan trọng**: `ppro.Transcript` có method TĨNH thật (`importFromJSON`, `exportToJSON`,
+  `hasTranscript`, `querySupportedLanguages`, `createImportTextSegmentsAction`) — KHÁC hẳn giả định
+  ban đầu (tưởng phải gọi qua instance `ClipProjectItem`, xác nhận `ClipProjectItem.prototype` KHÔNG
+  có method transcript nào). Đây là hướng đi đúng cho nhóm "native transcript UXP" trong audit list.
+
+**6 tool mới**:
+- `set_clip_transform` — gộp 5 setter transform đã verify đúng (position/anchor/scale/rotation/
+  opacity) thành 1 lệnh, không API mới.
+- `import_image_sequence` — wrapper trên `import_files` với `asNumberedStills:true` (tham số thứ 4 của
+  `project.importFiles` đã biết từ trước nhưng chưa dùng) — CHƯA live-test hành vi thật.
+- `has_transcript_uxp`/`get_transcript_languages_uxp`/`get_clip_transcript_uxp` — dùng
+  `ppro.Transcript.hasTranscript()`/`querySupportedLanguages()`/`exportToJSON()`. 2 tool đầu rủi ro
+  thấp (tên hàm rõ ràng, không tham số phức tạp), `get_clip_transcript_uxp` rủi ro hơn vì chữ ký
+  `exportToJSON(cpi)` chưa xác nhận.
+
+**Bug fix kèm theo (không thuộc batch mới, tình cờ phát hiện lần 2)**: `import_files`
+(`importFilesToProject`) có CÙNG bug đã fix ở `move_item_to_bin` — tìm bin đích chỉ scan
+`rootItem.getItems()` literal, bỏ sót bin con. Đã fix dùng `findProjectItemInBin` đệ quy. **Gợi ý cho
+tương lai**: nên audit toàn bộ file xem còn chỗ nào dùng pattern scan-root-thủ-công cũ này không, vì
+đã gặp lặp lại 2 lần.
+
+**Cố tình bỏ qua đợt này**: `import_folder` (không có bằng chứng `project.importFiles` tự động mở
+rộng thư mục thành danh sách file, không muốn đoán mù), `get_transition_properties` (không tìm thấy
+API đọc transition đã áp trên `VideoClipTrackItem`, chỉ có add/remove).
+
+**Cần restart app Claude 1 lần** để nạp 6 schema mới trước khi live-test.
+
+## ✅ LIVE-TEST đợt 2 xong — 3 bug fix + 1 giới hạn thật xác nhận + 1 tool chưa verify đủ (2026-09-15)
+
+Live-test trên sequence test riêng (`MCP ToolTest4 2026-09-15`, đã xoá) + import thêm 1 file mp3 thật
+(`file test mp3.MP3`, có sẵn trong project) để có clip audio thật test `apply_audio_effect`/
+`set_clips_volume` (ảnh tĩnh không có audio, không test được các tool này trên ảnh).
+
+**Đúng ngay từ đầu, 8/13**: `get_timeline_gaps`, `get_next_edit_point`, `audit_timeline_health`,
+`check_offline_media`, `get_duplicate_media`, `remove_effect_by_name`, `set_clips_volume` (1 lần lỗi
+đầu tiên ngay sau khi vừa `remove_effect_by_name` — nghi hiện tượng nhất thời, retest 2 lần liên tiếp
+sau đó đều đúng, không tái diễn), `get_clip_lut`.
+
+**🐛 Bug 1 (ĐÃ FIX) — `get_unused_media` báo SAI TOÀN BỘ item đang dùng là "unused"**: `getId()` gọi
+trên object đã `ppro.ClipProjectItem.cast()` ném lỗi âm thầm (bị `_safeCall` nuốt, trả `null`) dù
+`getId()` có trong prototype `ProjectItem` — cast không "kế thừa" theo nghĩa JS thường. Phải cast
+NGƯỢC lại `ppro.ProjectItem.cast(cpi)` trước khi gọi `getId()` mới ra giá trị thật. Verify sau fix:
+3 clip đang đặt trên sequence test biến mất khỏi danh sách unused, đúng kỳ vọng.
+
+**🐛 Bug 2 (ĐÃ FIX) — `apply_audio_effect` luôn báo "Không tạo được component"**: bọc nhầm
+`af.createComponentByDisplayName()` trong `project.lockedAccess()` — khác pattern gốc đã verify ở
+`setClipPan` (bước tạo component KHÔNG cần lockedAccess, chỉ bước `executeTransaction` append mới
+cần). Verify sau fix: thêm đúng "Balance" vào audio clip thật, xác nhận qua `get_clip_effects`.
+
+**🐛 Bug 3 (ĐÃ FIX) — `crop_clip` không áp được gì**: matchName đoán `"AE.ADBE Crop"` SAI — tên thật
+xác nhận qua `search_effects` là `"AE.ADBE AECrop"`. Verify sau fix: set đủ 4 giá trị left/top/right/
+bottom, đọc lại khớp đúng.
+
+**🔴 `apply_lut` — XÁC NHẬN THIẾT KẾ SAI, không phải bug nhỏ**: `getInputLUTID()` trả về GUID
+(`"00000000-0000-0000-0000-000000000000"` khi chưa set), KHÔNG PHẢI đường dẫn file — gọi
+`createSetInputLUTIDAction(lutPath)` với đường dẫn `.cube` không lỗi nhưng cũng không đổi gì (verify
+độc lập vẫn toàn số 0). API này nhiều khả năng dùng để CHỌN 1 LUT đã có trong catalog nội bộ Premiere
+theo GUID, không phải gán trực tiếp file `.cube` bất kỳ. **Cần điều tra thêm**: áp 1 LUT qua UI
+Premiere thật rồi đọc lại `get_clip_lut` để biết định dạng GUID thật, hoặc tìm API khác (có thể qua
+Lumetri effect param thay vì `InputLUTID`).
+
+**🟡 `import_mogrt_from_library` — chưa verify được với ID thật**: gọi với ID giả không lỗi, trả về
+`inserted:false` hợp lý (không tìm thấy) — nhưng KHÔNG có Creative Cloud Library MOGRT thật trong máy
+để test với ID hợp lệ, nên chưa xác nhận chữ ký tham số đúng/sai khi có input thật.
+
+## 🔨 13 tool mới ĐỢT 2 — ĐÃ CODE, CHỜ RESTART ĐỂ LIVE-TEST (2026-09-15)
+
+Tiếp tục "code hết một lượt" — trước khi code, probe thêm qua `debug_probe_api` để loại trừ đoán mù:
+- **Xác nhận KHÔNG có API** `detachProxy` (mọi biến thể tên) và KHÔNG có API "target track" nào trên
+  `Sequence`/`VideoTrack`/`AudioTrack` — bỏ hẳn `detach_proxy`/`set_target_track`/`get_target_tracks`,
+  không phải chưa tìm ra mà là xác nhận không tồn tại.
+- `Application` không có cách lấy instance tĩnh (chỉ có `version` trên prototype, không có static
+  factory) — `get_version_info` tiếp tục không khả thi.
+- `ClipProjectItem.createSetInputLUTIDAction`/`getInputLUTID`/`getEmbeddedLUTID` xác nhận tồn tại
+  nhưng arity native không lộ ra được — `apply_lut` code theo suy đoán (truyền path .cube trực tiếp),
+  **CHƯA xác nhận chữ ký thật**, cần live-test cẩn thận.
+- `SequenceEditor.insertMogrtFromLibrary` xác nhận tồn tại nhưng chữ ký tham số (đặc biệt
+  `libraryItemId`) CHƯA xác nhận — đoán theo pattern `insertMogrtFromPath`.
+
+**13 tool mới** (`plugin/premiereActions.js` GROUP 22):
+- Timeline analysis (pure computation, không API mới, rủi ro thấp): `get_timeline_gaps`,
+  `get_next_edit_point`, `audit_timeline_health` (gộp gaps + disabled + offline thành 1 báo cáo).
+- Media audit hàng loạt (pure read, quét toàn bộ project item đệ quy qua bin con): `check_offline_media`,
+  `get_duplicate_media`, `get_unused_media` (so khớp `getId()` giữa mọi track item mọi sequence với
+  toàn bộ project item).
+- Effects/Audio đợt 2: `apply_audio_effect` (qua `AudioFilterFactory.createComponentByDisplayName`,
+  kế thừa CẢNH BÁO cũ từ `set_clip_pan` — áp được component nhưng chưa chắc set param sau đó hoạt
+  động), `remove_effect_by_name` (tìm theo display name rồi tái dùng `removeEffect` cũ), `set_clips_volume`
+  (lặp `setClipVolume` theo range/track), `crop_clip` (wrapper `apply_effect`+`set_effect_param` có
+  sẵn, effect `AE.ADBE Crop`).
+- MOGRT/LUT (rủi ro cao nhất đợt này, chữ ký chưa xác nhận): `import_mogrt_from_library`, `get_clip_lut`
+  (an toàn, pure read), `apply_lut`.
+
+**Cần restart app Claude 1 lần** để nạp 13 schema mới, sau đó live-test trên sequence test riêng —
+ưu tiên test `apply_lut`/`import_mogrt_from_library` cẩn thận vì chữ ký chưa xác nhận (nhiều khả năng
+cần sửa lại sau khi thấy lỗi thật, theo đúng bài học các đợt trước).
+
 ## 🔨 26 tool mới ĐÃ CODE, CHỜ RESTART ĐỂ LIVE-TEST — batch mở rộng từ AUDIT_MASTER_TOOL_LIST.md (2026-09-15)
 
 Theo yêu cầu "code hết một lượt các tool khác đi". Trước khi code, chạy `debug_probe_api` mở rộng
