@@ -2,6 +2,14 @@
 
 Cập nhật lần cuối: 2026-09-15. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
+## ⚠️ RỦI RO CAO — probe `createAddVideoTransitionAction` làm TREO Premiere thật (2026-09-15)
+
+Trong lúc điều tra xem `add_transition` (hiện là stub báo "UXP chưa có API") có thật sự đúng không — probe phát hiện `ppro.TransitionFactory.createVideoTransition(matchName)` CÓ THẬT (tạo ra 1 component transition object hợp lệ, khác với `TransitionFactory.createTransition` không tồn tại). Nhưng khi thử gọi `clip.createAddVideoTransitionAction(transitionComp, <biến thể tham số thứ 2>)` với 5 biến thể liên tiếp trong 1 lần gọi (string "start", TickTime, boolean, number, không tham số) — **Premiere Pro treo hẳn (not responding)**, phải đợi user tự đóng/mở lại app mới phục hồi được (project tự động khôi phục đúng trạng thái đã save trước đó, không mất dữ liệu thật).
+
+**Không xác định được biến thể nào cụ thể gây treo** (vì gọi cả 5 trong 1 lần, không cô lập được). **QUYẾT ĐỊNH: KHÔNG thử lại việc gọi `createAddVideoTransitionAction` nữa** trong tương lai gần — rủi ro treo máy thật quá cao so với lợi ích, khác hẳn các lỗi "Not Enough Parameters"/"Illegal Parameter type" an toàn đã gặp nhiều lần trước đó (những lỗi đó chỉ throw JS, không treo app). Nếu sau này thật sự cần làm `add_transition`, phải test CỰC KỲ thận trọng: mỗi lần chỉ thử **1 biến thể tham số duy nhất**, save project trước mỗi lần thử, và dùng sequence test hoàn toàn cách ly.
+
+`add_transition`/`batch_add_transitions` giữ nguyên là stub (báo hướng dẫn làm tay) như hiện tại — KHÔNG đổi.
+
 ## 🔨 5 tool Bin & Project Item nâng cao mới — ĐÃ CODE, CHỜ RESTART ĐỂ LIVE-TEST (2026-09-15)
 
 Tiếp tục nhóm 4 (Bin & project item management) từ `AUDIT_MASTER_TOOL_LIST.md`. Probe trực tiếp prototype `ProjectItem`/`FolderItem` (hijack tạm `get_project_info`, không cần restart) xác nhận:
