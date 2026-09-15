@@ -438,6 +438,41 @@ async function _dispatchCommand(msg) {
       case "get_sequence_in_out_points": result = await getSequenceInOutPoints();                   break;
       case "set_sequence_in_out_points": result = await setSequenceInOutPoints(params);              break;
 
+      // Group 30: Sequence lifecycle & info nâng cao (2026-09-15)
+      case "get_sequence_count":     result = await getSequenceCount();                              break;
+      case "close_sequence":         result = await closeSequenceTool(params);                       break;
+      case "get_full_sequence_info": result = await getFullSequenceInfo(params);                     break;
+      case "set_sequence_pixel_aspect_ratio": result = await setSequencePixelAspectRatio(params);     break;
+      case "set_sequence_field_type": result = await setSequenceFieldType(params);                    break;
+      case "set_sequence_display_format": result = await setSequenceDisplayFormat(params);            break;
+      case "set_sequence_resolution": result = await setSequenceResolution(params);                   break;
+
+      // Group 31: Project item / media nâng cao (2026-09-15)
+      case "set_item_start_time":    result = await setItemStartTime(params);                         break;
+      case "get_file_metadata":      result = await getFileMetadata(params);                          break;
+      case "move_items_to_bin":      result = await moveItemsToBin(params);                            break;
+
+      // Group 32: Clip/TrackItem info nâng cao (2026-09-15)
+      case "get_clip_speed":         result = await getClipSpeedTool(params, bLog);                   break;
+      case "get_clip_properties":    result = await getClipProperties(params, bLog);                  break;
+      case "get_total_clip_count":   result = await getTotalClipCount(params);                        break;
+      case "get_clip_at_playhead":   result = await getClipAtPlayhead(params);                        break;
+
+      // Group 33: Selection nâng cao đợt 2 (2026-09-15)
+      case "select_clips_by_name":   result = await selectClipsByName(params);                        break;
+      case "select_disabled_clips":  result = await selectDisabledClips();                            break;
+
+      // Group 34: Effects nâng cao đợt 2 (2026-09-15)
+      case "batch_apply_effect":     result = await batchApplyEffect(params, bLog);                   break;
+      case "copy_effects_between_clips": result = await copyEffectsBetweenClips(params, bLog);        break;
+
+      // Group 35: Transitions nâng cao (2026-09-15) — CHƯA live-test, xem cảnh báo an toàn trong code
+      case "remove_transition":      result = await removeTransitionTool(params, bLog);               break;
+
+      // Group 36: Source Monitor (2026-09-15)
+      case "open_in_source_monitor": result = await openInSourceMonitor(params);                       break;
+      case "get_source_monitor_clip": result = await getSourceMonitorClip();                           break;
+
       default:
         throw new Error("Tool không được hỗ trợ: " + tool + ". Dùng get_beat_styles để xem danh sách.");
     }
@@ -862,9 +897,116 @@ async function _cmdDebugProbeApi() {
     return (p && typeof p.createCaptionTrack === "function") ? "có" : "KHÔNG có";
   });
 
-
-
-
+  // --- PROBE ĐỢT MỞ RỘNG 2026-09-15 (chuẩn bị code batch tool mới từ AUDIT_MASTER_TOOL_LIST.md) ---
+  probe("_protoMethods:Project", () => {
+    const p = _ppro.Project && _ppro.Project.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có Project";
+  });
+  probe("_protoMethods:Sequence", () => {
+    const p = _ppro.Sequence && _ppro.Sequence.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có Sequence";
+  });
+  probe("_protoMethods:SequenceEditor", () => {
+    const p = _ppro.SequenceEditor && _ppro.SequenceEditor.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có SequenceEditor";
+  });
+  probe("_protoMethods:App", () => {
+    const p = _ppro.App && _ppro.App.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có App";
+  });
+  probe("_protoMethods:TrackItem", () => {
+    const p = _ppro.TrackItem && _ppro.TrackItem.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có TrackItem";
+  });
+  probe("_protoMethods:Track", () => {
+    const p = _ppro.Track && _ppro.Track.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có Track";
+  });
+  probe("_protoMethods:Component", () => {
+    const p = _ppro.Component && _ppro.Component.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có Component";
+  });
+  probe("_protoMethods:ProjectItem", () => {
+    const p = _ppro.ProjectItem && _ppro.ProjectItem.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có ProjectItem";
+  });
+  probe("_protoMethods:ClipProjectItem", () => {
+    const p = _ppro.ClipProjectItem && _ppro.ClipProjectItem.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có ClipProjectItem";
+  });
+  probe("_protoMethods:FolderItem", () => {
+    const p = _ppro.FolderItem && _ppro.FolderItem.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có FolderItem";
+  });
+  probe("_protoMethods:SourceMonitor", () => {
+    const p = _ppro.SourceMonitor && _ppro.SourceMonitor.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có SourceMonitor";
+  });
+  probe("_moduleTopLevelKeys", () => Object.keys(_ppro).sort());
+  probe("_protoMethods:Application", () => {
+    const p = _ppro.Application && _ppro.Application.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có Application";
+  });
+  probe("_protoMethods:SequenceSettings", () => {
+    const p = _ppro.SequenceSettings && _ppro.SequenceSettings.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có SequenceSettings";
+  });
+  probe("_protoMethods:Media", () => {
+    const p = _ppro.Media && _ppro.Media.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có Media";
+  });
+  probe("_protoMethods:AudioTrack", () => {
+    const p = _ppro.AudioTrack && _ppro.AudioTrack.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có AudioTrack";
+  });
+  probe("_protoMethods:VideoTrack", () => {
+    const p = _ppro.VideoTrack && _ppro.VideoTrack.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có VideoTrack";
+  });
+  probe("_protoMethods:VideoClipTrackItem", () => {
+    const p = _ppro.VideoClipTrackItem && _ppro.VideoClipTrackItem.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có VideoClipTrackItem";
+  });
+  probe("_protoMethods:TrackItemSelection", () => {
+    const p = _ppro.TrackItemSelection && _ppro.TrackItemSelection.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có TrackItemSelection";
+  });
+  probe("_protoMethods:ProjectSettings", () => {
+    const p = _ppro.ProjectSettings && _ppro.ProjectSettings.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có ProjectSettings";
+  });
+  probe("_protoMethods:CaptionTrack", () => {
+    const p = _ppro.CaptionTrack && _ppro.CaptionTrack.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có CaptionTrack";
+  });
+  probe("_protoMethods:Transcript", () => {
+    const p = _ppro.Transcript && _ppro.Transcript.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có Transcript";
+  });
+  probe("_protoMethods:SourceMonitor(own)", () => {
+    const o = _ppro.SourceMonitor;
+    return o ? Object.getOwnPropertyNames(o).sort() : "KHÔNG có SourceMonitor object";
+  });
+  probe("_protoMethods:SequenceUtils", () => {
+    const o = _ppro.SequenceUtils;
+    return o ? Object.getOwnPropertyNames(o).sort() : "KHÔNG có SequenceUtils";
+  });
+  probe("_protoMethods:ProjectUtils", () => {
+    const o = _ppro.ProjectUtils;
+    return o ? Object.getOwnPropertyNames(o).sort() : "KHÔNG có ProjectUtils";
+  });
+  probe("_protoMethods:TransitionFactory(own)", () => {
+    const o = _ppro.TransitionFactory;
+    return o ? Object.getOwnPropertyNames(o).sort() : "KHÔNG có";
+  });
+  probe("_protoMethods:VideoTransition", () => {
+    const p = _ppro.VideoTransition && _ppro.VideoTransition.prototype;
+    return p ? Object.getOwnPropertyNames(p).sort() : "KHÔNG có VideoTransition";
+  });
+  probe("Constants:VideoFieldType", () => _ppro.Constants && _ppro.Constants.VideoFieldType);
+  probe("Constants:VideoDisplayFormatType", () => _ppro.Constants && _ppro.Constants.VideoDisplayFormatType);
+  probe("Constants:AudioDisplayFormatType", () => _ppro.Constants && _ppro.Constants.AudioDisplayFormatType);
+  probe("Constants:PixelAspectRatio", () => _ppro.Constants && _ppro.Constants.PixelAspectRatio);
 
 
 

@@ -2081,16 +2081,17 @@ export const PREMIERE_TOOLS = [
 
   {
     name: 'attach_proxy',
-    description: 'Gắn file proxy cho clip đang chọn.',
+    description: 'Gắn file proxy cho clip đang chọn. CHƯA xác nhận đầy đủ end-to-end (test bằng ảnh giả không phải video proxy hợp lệ) — cần test lại với file .mp4 thật.',
     inputSchema: {
       type: 'object',
       properties: {
-        proxyFilePath: { type: 'string', description: 'Đường dẫn tuyệt đối file proxy.' }
+        proxyFilePath: { type: 'string', description: 'Đường dẫn tuyệt đối file proxy.' },
+        isHiRes: { type: 'boolean', description: 'Ý nghĩa chưa xác nhận đầy đủ (nghi ngờ "dùng làm bản hi-res thay thế"), mặc định false.' }
       },
       required: ['proxyFilePath']
     },
     execute(wsBridge, args) {
-      return wsBridge.sendCommand('attach_proxy', { proxyFilePath: args.proxyFilePath }, 20000);
+      return wsBridge.sendCommand('attach_proxy', { proxyFilePath: args.proxyFilePath, isHiRes: args.isHiRes }, 20000);
     }
   },
 
@@ -2129,14 +2130,14 @@ export const PREMIERE_TOOLS = [
 
   {
     name: 'set_footage_interpretation',
-    description: 'Đổi cách diễn giải (interpret) frame rate và/hoặc pixel aspect ratio của clip đang chọn — không đổi file gốc, chỉ đổi cách Premiere đọc nó.',
+    description: 'Đổi cách diễn giải (interpret) frame rate và pixel aspect ratio của clip đang chọn — không đổi file gốc, chỉ đổi cách Premiere đọc nó. BẮT BUỘC truyền cả 2 tham số (partial-update chỉ 1 field không đáng tin trên API này — dùng get_footage_interpretation đọc giá trị hiện tại trước nếu chỉ muốn đổi 1 field).',
     inputSchema: {
       type: 'object',
       properties: {
-        frameRate: { type: 'number', description: 'Frame rate mới để diễn giải (fps). Bỏ trống nếu chỉ đổi pixelAspectRatio.' },
-        pixelAspectRatio: { type: 'number', description: 'Pixel aspect ratio mới. Bỏ trống nếu chỉ đổi frameRate.' }
+        frameRate: { type: 'number', description: 'Frame rate mới để diễn giải (fps). Bắt buộc.' },
+        pixelAspectRatio: { type: 'number', description: 'Pixel aspect ratio mới. Bắt buộc.' }
       },
-      required: []
+      required: ['frameRate', 'pixelAspectRatio']
     },
     execute(wsBridge, args) {
       return wsBridge.sendCommand('set_footage_interpretation', { frameRate: args.frameRate, pixelAspectRatio: args.pixelAspectRatio }, 15000);
@@ -2205,6 +2206,277 @@ export const PREMIERE_TOOLS = [
     },
     execute(wsBridge, args) {
       return wsBridge.sendCommand('create_subclip', { itemName: args.itemName, inSeconds: args.inSeconds, outSeconds: args.outSeconds, newName: args.newName }, 20000);
+    }
+  },
+
+  // ==========================================================================
+  // Batch mở rộng 2026-09-15 — CHƯA LIVE-TEST bất kỳ tool nào trong nhóm này (xem TODO.md).
+  // ==========================================================================
+
+  {
+    name: 'get_sequence_count',
+    description: 'Đếm số sequence hiện có trong project và liệt kê tên.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('get_sequence_count', {}, 10000);
+    }
+  },
+  {
+    name: 'close_sequence',
+    description: 'Đóng tab timeline của 1 sequence (không xoá sequence khỏi project). CHƯA LIVE-TEST.',
+    inputSchema: {
+      type: 'object',
+      properties: { name: { type: 'string', description: 'Tên sequence cần đóng.' } },
+      required: ['name']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('close_sequence', { name: args.name }, 15000);
+    }
+  },
+  {
+    name: 'get_full_sequence_info',
+    description: 'Thông tin đầy đủ 1 sequence trong 1 lệnh: kích thước khung hình, số track video/audio/caption, in/out, zero point, duration.',
+    inputSchema: {
+      type: 'object',
+      properties: { sequenceName: { type: 'string', description: 'Tên sequence. Bỏ trống = sequence active.' } },
+      required: []
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('get_full_sequence_info', { sequenceName: args.sequenceName }, 15000);
+    }
+  },
+  {
+    name: 'set_sequence_pixel_aspect_ratio',
+    description: 'Đổi pixel aspect ratio của sequence. ĐÃ LIVE-TEST ĐÚNG (2026-09-15) — nội bộ dùng string "N:M" (vd "1:1"), truyền number sẽ tự quy đổi sang "N:1".',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        pixelAspectRatio: { description: 'Pixel aspect ratio mới — number (vd 1, tự quy đổi thành "1:1") hoặc string "N:M" (vd "40:33") cho tỉ lệ không nguyên.' },
+        sequenceName: { type: 'string', description: 'Tên sequence. Bỏ trống = sequence active.' }
+      },
+      required: ['pixelAspectRatio']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_sequence_pixel_aspect_ratio', { pixelAspectRatio: args.pixelAspectRatio, sequenceName: args.sequenceName }, 15000);
+    }
+  },
+  {
+    name: 'set_sequence_field_type',
+    description: 'Đổi field type (progressive/interlaced) của sequence. CHƯA LIVE-TEST giá trị enum thật cần truyền.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fieldType: { description: 'Giá trị field type (số enum thật của Premiere — CHƯA xác nhận, cần probe Constants.FieldType).' },
+        sequenceName: { type: 'string', description: 'Tên sequence. Bỏ trống = sequence active.' }
+      },
+      required: ['fieldType']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_sequence_field_type', { fieldType: args.fieldType, sequenceName: args.sequenceName }, 15000);
+    }
+  },
+  {
+    name: 'set_sequence_display_format',
+    description: 'Đổi định dạng hiển thị timecode video/audio của sequence. CHƯA LIVE-TEST giá trị enum thật.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        videoDisplayFormat: { description: 'Giá trị định dạng hiển thị video (enum — chưa xác nhận).' },
+        audioDisplayFormat: { description: 'Giá trị định dạng hiển thị audio (enum — chưa xác nhận).' },
+        sequenceName: { type: 'string', description: 'Tên sequence. Bỏ trống = sequence active.' }
+      },
+      required: []
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_sequence_display_format', { videoDisplayFormat: args.videoDisplayFormat, audioDisplayFormat: args.audioDisplayFormat, sequenceName: args.sequenceName }, 15000);
+    }
+  },
+  {
+    name: 'set_sequence_resolution',
+    description: 'Đổi độ phân giải khung hình (width/height) của 1 sequence đã tồn tại.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        frameWidth: { type: 'number', description: 'Chiều rộng khung hình mới (px).' },
+        frameHeight: { type: 'number', description: 'Chiều cao khung hình mới (px).' },
+        sequenceName: { type: 'string', description: 'Tên sequence. Bỏ trống = sequence active.' }
+      },
+      required: ['frameWidth', 'frameHeight']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_sequence_resolution', { frameWidth: args.frameWidth, frameHeight: args.frameHeight, sequenceName: args.sequenceName }, 15000);
+    }
+  },
+  {
+    name: 'set_item_start_time',
+    description: 'Đặt timecode bắt đầu (start time) của Media gắn với 1 project item — khác startSeconds của 1 clip cụ thể trên timeline.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        itemName: { type: 'string', description: 'Tên project item trong Project panel.' },
+        seconds: { type: 'number', description: 'Timecode bắt đầu mới (giây).' }
+      },
+      required: ['itemName', 'seconds']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_item_start_time', { itemName: args.itemName, seconds: args.seconds }, 15000);
+    }
+  },
+  {
+    name: 'get_file_metadata',
+    description: 'Đọc metadata kỹ thuật của 1 project item: content type, đường dẫn media, offline hay không, duration/start.',
+    inputSchema: {
+      type: 'object',
+      properties: { itemName: { type: 'string', description: 'Tên project item.' } },
+      required: ['itemName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('get_file_metadata', { itemName: args.itemName }, 15000);
+    }
+  },
+  {
+    name: 'move_items_to_bin',
+    description: 'Di chuyển hàng loạt project item vào 1 bin đích (lặp move_item_to_bin cho từng item, báo lỗi riêng từng item nếu có).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        itemNames: { type: 'array', items: { type: 'string' }, description: 'Danh sách tên item cần di chuyển.' },
+        targetBin: { type: 'string', description: 'Tên bin đích.' }
+      },
+      required: ['itemNames', 'targetBin']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('move_items_to_bin', { itemNames: args.itemNames, targetBin: args.targetBin }, 30000);
+    }
+  },
+  {
+    name: 'get_clip_speed',
+    description: 'Đọc tốc độ (%) và trạng thái reverse hiện tại của clip đang chọn trên timeline.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('get_clip_speed', {}, 10000);
+    }
+  },
+  {
+    name: 'get_clip_properties',
+    description: 'Đọc chi tiết đầy đủ 1 lệnh cho clip đang chọn: tên, start/end/duration, in/out, track, loại media, disabled, speed, reversed, selected, adjustment layer, type.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('get_clip_properties', {}, 10000);
+    }
+  },
+  {
+    name: 'get_total_clip_count',
+    description: 'Đếm tổng số clip (mọi track) trong 1 sequence.',
+    inputSchema: {
+      type: 'object',
+      properties: { sequenceName: { type: 'string', description: 'Tên sequence. Bỏ trống = sequence active.' } },
+      required: []
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('get_total_clip_count', { sequenceName: args.sequenceName }, 15000);
+    }
+  },
+  {
+    name: 'get_clip_at_playhead',
+    description: 'Tìm clip đang nằm tại vị trí playhead hiện tại trên 1 track chỉ định.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        trackIndex: { type: 'number', description: 'Chỉ số track (0-based). Mặc định 0.' },
+        trackType: { type: 'string', enum: ['video', 'audio'], description: 'Mặc định "video".' }
+      },
+      required: []
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('get_clip_at_playhead', { trackIndex: args.trackIndex, trackType: args.trackType }, 10000);
+    }
+  },
+  {
+    name: 'select_clips_by_name',
+    description: 'Chọn tất cả clip trên timeline có tên khớp (chứa hoặc khớp chính xác) — thay thế toàn bộ selection hiện tại.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Tên hoặc từ khoá cần khớp.' },
+        exact: { type: 'boolean', description: 'true = khớp chính xác, false (mặc định) = chứa từ khoá (không phân biệt hoa/thường).' }
+      },
+      required: ['name']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('select_clips_by_name', { name: args.name, exact: args.exact }, 15000);
+    }
+  },
+  {
+    name: 'select_disabled_clips',
+    description: 'Chọn tất cả clip đang bị tắt (disabled) trên timeline — thay thế toàn bộ selection hiện tại.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('select_disabled_clips', {}, 15000);
+    }
+  },
+  {
+    name: 'batch_apply_effect',
+    description: 'Áp 1 effect lên TẤT CẢ clip đang được chọn trên timeline (lặp apply_effect, báo lỗi riêng từng clip nếu có).',
+    inputSchema: {
+      type: 'object',
+      properties: { matchName: { type: 'string', description: 'matchName effect cần áp (giống apply_effect).' } },
+      required: ['matchName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('batch_apply_effect', { matchName: args.matchName }, 30000);
+    }
+  },
+  {
+    name: 'copy_effects_between_clips',
+    description: 'Copy toàn bộ effect (trừ Motion/Opacity nội tại) từ clip nguồn đang chọn sang 1 clip đích khác — chỉ copy việc ÁP effect, KHÔNG copy giá trị param đã chỉnh.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        targetStartSeconds: { type: 'number', description: 'Vị trí bắt đầu clip đích trên timeline (giây).' },
+        targetTrackIndex: { type: 'number', description: 'Chỉ số track của clip đích.' },
+        targetTrackType: { type: 'string', enum: ['video', 'audio'], description: 'Mặc định "video".' }
+      },
+      required: ['targetStartSeconds', 'targetTrackIndex']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('copy_effects_between_clips', { targetStartSeconds: args.targetStartSeconds, targetTrackIndex: args.targetTrackIndex, targetTrackType: args.targetTrackType }, 30000);
+    }
+  },
+  {
+    name: 'remove_transition',
+    description: 'Gỡ transition khỏi 1 clip cụ thể trên timeline. CHƯA LIVE-TEST — dùng createRemoveVideoTransitionAction (khác hẳn createAddVideoTransitionAction đã biết làm treo Premiere thật, nhưng vẫn cần thận trọng khi test lần đầu — xem TODO.md).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        startSeconds: { type: 'number', description: 'Vị trí bắt đầu clip trên timeline (giây).' },
+        trackIndex: { type: 'number', description: 'Chỉ số track.' },
+        trackType: { type: 'string', enum: ['video', 'audio'], description: 'Mặc định "video".' }
+      },
+      required: ['startSeconds', 'trackIndex']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('remove_transition', { startSeconds: args.startSeconds, trackIndex: args.trackIndex, trackType: args.trackType }, 15000);
+    }
+  },
+  {
+    name: 'open_in_source_monitor',
+    description: 'Mở 1 project item trong Source Monitor.',
+    inputSchema: {
+      type: 'object',
+      properties: { itemName: { type: 'string', description: 'Tên project item cần mở.' } },
+      required: ['itemName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('open_in_source_monitor', { itemName: args.itemName }, 15000);
+    }
+  },
+  {
+    name: 'get_source_monitor_clip',
+    description: 'Đọc item đang mở trong Source Monitor và vị trí playhead của nó.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('get_source_monitor_clip', {}, 10000);
     }
   }
 ];

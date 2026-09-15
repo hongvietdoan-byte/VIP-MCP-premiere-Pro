@@ -2,6 +2,160 @@
 
 Cập nhật lần cuối: 2026-09-15. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
+## 🔨 26 tool mới ĐÃ CODE, CHỜ RESTART ĐỂ LIVE-TEST — batch mở rộng từ AUDIT_MASTER_TOOL_LIST.md (2026-09-15)
+
+Theo yêu cầu "code hết một lượt các tool khác đi". Trước khi code, chạy `debug_probe_api` mở rộng
+(probe `Object.getOwnPropertyNames(prototype)` của `Project`/`Sequence`/`SequenceEditor`/
+`SequenceSettings`/`ClipProjectItem`/`Media`/`AudioTrack`/`VideoTrack`/`VideoClipTrackItem`/
+`TrackItemSelection`/`FolderItem`/`SourceMonitor`/`Application`) để xác nhận API THẬT tồn tại thay vì
+đoán mù — kết quả đầy đủ đã lưu vào lịch sử phiên, các phát hiện quan trọng:
+- `TrackItemSelection.removeItem()` **CÓ THẬT** (giải toả nghi ngờ cũ ở `set_clip_selection`, nhưng
+  chưa đổi code hiện tại vì bản cũ đã verify đúng — để nguyên, không sửa cái đang chạy tốt).
+- `VideoClipTrackItem.createRemoveVideoTransitionAction()` tồn tại, KHÁC HẲN
+  `createAddVideoTransitionAction` (đã biết làm treo Premiere thật) — nhưng CHƯA live-test, vẫn cần
+  thận trọng.
+- `ppro.SourceMonitor` là namespace object (không phải class instance) với
+  `openProjectItem/openFilePath/play/getPosition/setPosition/getProjectItem/closeClip/closeAllClips`.
+- `Application.prototype` chỉ có `version` (property, cần instance — CHƯA tìm ra cách lấy instance,
+  nên KHÔNG code `get_version_info`/`get_app_version` đợt này, để trống).
+- `SequenceSettings` có đủ setter cho PAR/field type/display format/frame rect (đã dùng
+  `getSettings→mutate→createSetSettingsAction→verify`, cùng pattern `set_sequence_frame_rate` đã
+  verify đúng trước đó) — nhưng giá trị enum thật của `fieldType`/`displayFormat` CHƯA xác nhận.
+- `ClipProjectItem` có `createSetOverrideFrameRateAction`/`createSetOverridePixelAspectRatioAction`
+  RIÊNG BIỆT với `createSetFootageInterpretationAction` đã dùng — CHƯA thử, có thể là đường thay thế
+  đáng tin hơn nếu `set_footage_interpretation` sau này vẫn còn vấn đề.
+- `Media` (từ `cpi.getMedia()`) có `duration`/`start` là PLAIN PROPERTY (không phải `getDuration()`),
+  cùng `createSetStartAction`.
+- KHÔNG có `App`/`Track`/`TrackItem` ở top-level module (chỉ có instance qua `AudioTrack`/
+  `VideoTrack`/`VideoClipTrackItem`/`AudioClipTrackItem`) — khớp pattern cũ đã biết.
+
+**26 tool mới** (`plugin/premiereActions.js` GROUP 21, wire `plugin/mcpBridge.js` + `server/src/tools/premiere-tools.js`):
+- Sequence lifecycle/info: `get_sequence_count`, `close_sequence`, `get_full_sequence_info`.
+- Sequence settings: `set_sequence_pixel_aspect_ratio`, `set_sequence_field_type` (enum CHƯA xác
+  nhận), `set_sequence_display_format` (enum CHƯA xác nhận), `set_sequence_resolution`.
+- Project item/media: `set_item_start_time`, `get_file_metadata`, `move_items_to_bin` (batch wrapper
+  trên `move_item_to_bin` đã verify).
+- Clip info: `get_clip_speed`, `get_clip_properties`, `get_total_clip_count`, `get_clip_at_playhead`.
+- Selection: `select_clips_by_name`, `select_disabled_clips` (cùng pattern `clearSelection()` trước
+  khi set đã fix ở bug pattern 4).
+- Effects: `batch_apply_effect` (lặp `applyEffect` đã verify), `copy_effects_between_clips` (đọc
+  `getComponentChain()` nguồn, chỉ copy việc ÁP effect, KHÔNG copy giá trị param).
+- Transitions: `remove_transition` — **CẦN THẬN TRỌNG khi live-test lần đầu** dù lý thuyết an toàn
+  hơn add (không cần dựng transition component phức tạp) — save project trước, test trên sequence
+  cách ly, đúng quy trình đã áp dụng với `createAddVideoTransitionAction`.
+- Source Monitor: `open_in_source_monitor`, `get_source_monitor_clip`.
+
+**Cố tình BỎ QUA, không code đợt này** (rủi ro cao hoặc chữ ký chưa xác nhận đủ tin cậy):
+- `close_project` — rủi ro tự ngắt kết nối WS đang dùng để gọi chính nó, không an toàn cho tool tự động.
+- `create_sequence_from_media`/`create_sequence_from_preset` (`createSequenceFromMedia`/
+  `createSequenceWithPresetPath`) — API có thật nhưng chữ ký tham số chưa probe.
+- `import_ae_comps`/`import_sequences` — API có thật (`Project.importAEComps`/`importSequences`)
+  nhưng chữ ký chưa probe.
+- `create_subsequence` (`Sequence.createSubsequence`) — có thật nhưng chữ ký chưa probe.
+- `get_version_info`/`get_app_version` — không tìm ra cách lấy `Application` instance.
+- `create_smart_bin` (`FolderItem.createSmartBinAction`) — có thật nhưng chữ ký search-criteria chưa rõ.
+- `select_item` (chọn item trong Project panel, khác chọn clip trên timeline) — chưa probe
+  `ProjectItemSelection`.
+- Group 13 audio cấp TRACK (`set_track_volume`/`pan`/`solo`) — đã XÁC NHẬN không khả thi từ trước
+  (Track prototype không có API này, xem memory).
+- Group 17 (AI editorial `plan_*`) — không phải tool API đơn giản, là cả 1 tính năng phức tạp riêng.
+- Group 15 (video/scene analysis qua FFmpeg) — cần xử lý ngoài UXP, ngoài phạm vi.
+
+**Cần restart app Claude 1 lần** để nạp 26 schema mới trước khi live-test đồng loạt trên sequence test
+riêng (không đụng dữ liệu thật), đặc biệt cẩn trọng với `remove_transition`.
+
+## ✅ LIVE-TEST batch 21/26 tool xong sau restart — 4 bug fix mới + 1 bug cũ tình cờ phát hiện (2026-09-15)
+
+Live-test trên sequence test riêng (`MCP ToolTest2 2026-09-15`, 60fps→30fps, đã xoá sau khi xong) +
+2 ảnh test tự tạo (đã xoá). **21/21 tool gọi thử đều verify được** (trừ `remove_transition` — xem lý
+do bỏ qua bên dưới).
+
+**Đúng ngay từ đầu:** `get_sequence_count`, `get_total_clip_count`, `get_clip_speed`,
+`get_clip_properties`, `get_clip_at_playhead`, `select_clips_by_name`, `select_disabled_clips`,
+`batch_apply_effect`, `copy_effects_between_clips`, `open_in_source_monitor`,
+`get_source_monitor_clip`, `close_sequence` (verify: sequence không mất dữ liệu, chỉ đóng tab, active
+sequence tự chuyển đúng).
+
+**🐛 Bug 1 (ĐÃ FIX) — `get_full_sequence_info` trả `guid: {}`**: `sequence.guid` là object có
+`.toString()`, không phải string sẵn — JSON.stringify object đó ra `{}`. Fix: gọi `.toString()`
+tường minh.
+
+**🐛 Bug 2 (ĐÃ FIX) — `set_item_start_time`/`get_file_metadata` thiếu `startSeconds`/`durationSeconds`**:
+`Media.start`/`Media.duration` (từ `cpi.getMedia()`) là PROPERTY TRẢ VỀ PROMISE (có `.then/.catch/
+.finally`, JSON.stringify ra `"{}"`), khác mọi property phẳng khác trong file (vd `Sequence.guid`,
+`Sequence.name`) — phải `await` riêng thay vì đọc trực tiếp `.seconds`. Verify sau fix: set start=2s
+→ đọc lại đúng `2`; `durationSeconds` ảnh tĩnh ra `43200` (12 tiếng, default still-image duration của
+Premiere — không phải bug).
+
+**🐛 Bug 3 (ĐÃ FIX, tình cờ phát hiện — KHÔNG thuộc batch mới) — `move_item_to_bin` gốc bỏ sót item
+không nằm ở root**: hàm cũ (viết từ 2026-09-14) chỉ scan `rootItem.getItems()` LITERAL, bỏ qua bin
+con — nhưng `import_files` không truyền `binName` thường đặt item vào "insertion bin" hiện tại của
+Premiere (bin đang mở trong Project panel UI), KHÔNG PHẢI luôn luôn root. Hậu quả: item vừa import
+xong rất hay bị báo "không tìm thấy" dù có thật (đã tự để lại comment cảnh báo trong code cũ nhưng
+chưa ai quay lại sửa). Đã fix: dùng `findProjectItemInBin` đệ quy (đã verify đúng ở nhiều tool khác)
+thay vì scan root thủ công. Verify sau fix: `move_item_to_bin`/`move_items_to_bin` (batch wrapper mới)
+cả 2 đều đúng, item nằm bất kỳ đâu trong cây bin đều tìm thấy.
+
+**🐛 Bug 4 (ĐÃ FIX) — `set_sequence_resolution` không đổi gì**: `setVideoFrameRect({width,height})`
+(object phẳng mới dựng) bị âm thầm bỏ qua — cùng bug pattern đã gặp ở FootageInterpretation: API cần
+object ĐÃ ĐỌC RA (`getVideoFrameRect()`) rồi mutate `.width`/`.height` trực tiếp, không phải object
+mới. Đã fix `_withSequenceSettings` hỗ trợ thêm cờ `needsRect` để đọc rect trước khi mutate. Verify:
+set 1280x720 → đọc lại đúng.
+
+**🐛 Bug 5 (ĐÃ FIX) — `set_sequence_pixel_aspect_ratio` không đổi gì**: `getVideoPixelAspectRatio()`
+trả về STRING dạng `"N:M"` (vd `"1:1"`), không phải số — và `setVideoPixelAspectRatio()` cũng cần
+STRING cùng định dạng, truyền số thô (`1.5`) bị bỏ qua im lặng. Đã fix: tool nhận number (tự quy đổi
+`"N:1"`) hoặc string `"N:M"` truyền thẳng cho tỉ lệ không nguyên. Phát hiện thêm:
+`Constants.PixelAspectRatio` có sẵn preset tên (`SQUARE:"1:1"`, `DVNTSCWide:"40:33"`,
+`Anamorphic:"2:1"`, `HDAnamorphic1080:"1920:1440"`...) — có thể expose thêm sau nếu cần. Verify: set
+`"2:1"` → đọc lại đúng `"2:1"`.
+
+**🐛 Bug 6 (ĐÃ FIX) — `set_sequence_field_type`/`set_sequence_display_format` dùng sai tên hằng số +
+sai kiểu tham số**: Tên đúng là `Constants.VideoFieldType`/`Constants.VideoDisplayFormatType`/
+`Constants.AudioDisplayFormatType` (không phải `Constants.FieldType` đoán ban đầu) — giá trị thật đã
+xác nhận qua probe: `VideoFieldType {PROGRESSIVE:0, UPPER_FIRST:1, LOWER_FIRST:2}`,
+`VideoDisplayFormatType {FPS_23_976:110, FPS_25:101, FPS_29_97:102, FPS_29_97_NON_DROP:103,
+FEET_FRAME_16mm:111, FEET_FRAME_35mm:112, FRAMES:109}`, `AudioDisplayFormatType {SAMPLE_RATE:200,
+MILLISECONDS:201}`. Riêng display format còn có bug phụ giống bug 4/5: `getXDisplayFormat()` trả về
+OBJECT `{type: <enum>}`, và `setXDisplayFormat()` cũng cần object đó (đọc ra, mutate `.type`, set lại)
+chứ không nhận số thô trực tiếp — đã fix `_withSequenceSettings` cho phép `mutateFn` là async để đọc
+object trước khi mutate. `set_sequence_field_type` verify: `"progressive"` → đọc lại đúng `0`.
+`set_sequence_display_format` verify: set `audioDisplayFormat:"MILLISECONDS"` → đọc lại `201`; set
+tiếp `videoDisplayFormat:"FPS_25"` → đọc lại `101`, `audioDisplayFormat` vẫn giữ nguyên `201` (không
+bị clobber, khác hẳn bug FootageInterpretation đã gặp trước — ở đây `getSettings()` phản ánh đúng
+state đã persist, chỉ cần fix đúng shape tham số là đủ).
+
+**Bài học tổng hợp đợt này**: RẤT NHIỀU setter trong `SequenceSettings`/`FootageInterpretation` yêu
+cầu object đã ĐỌC RA rồi mutate field, KHÔNG chấp nhận object phẳng mới dựng hay giá trị thô — không
+lỗi khi gọi sai (âm thầm no-op), chỉ phát hiện được qua verify read-back BẰNG LỆNH GỌI RIÊNG (đúng bài
+học đã ghi nhiều lần trong dự án, nhưng lần này áp dụng đúng ngay từ khi test nên bắt được nhanh).
+
+**🔴 `remove_transition` — CHƯA live-test**: không có transition nào sẵn trên sequence test để thử
+gỡ, và KHÔNG dùng `add_transition`/`createAddVideoTransitionAction` để tạo transition test (đã biết
+làm treo Premiere thật, xem cảnh báo an toàn phía trên) — cần user tự kéo tay 1 transition vào clip
+trên sequence test qua UI Premiere rồi mới test được tool này. `close_project` vẫn cố tình không code
+(rủi ro tự ngắt WS).
+
+
+## ✅ LIVE-TEST batch 19 tool mới sau restart — 15/19 đúng ngay/sau fix, 4 vấn đề còn mở (2026-09-15)
+
+Sau khi user restart app, live-test toàn bộ batch tool đang chờ (nhóm Bin/Project Item, Selection nâng cao, Zero Point, Proxy/Footage, item In/Out/Subclip) trên sequence test riêng (`MCP ToolTest 2026-09-15`, đã xoá sau khi xong) + ảnh test tự tạo (`mcp_test_image.png`, đã xoá sau khi xong), KHÔNG đụng dữ liệu thật.
+
+**Đúng ngay từ đầu, không cần fix:** `get_zero_point`/`set_zero_point`, `find_project_item_by_name`, `get_project_item_info`, `rename_project_item`, `delete_project_item`, `get_bin_contents`, `set_clip_selection` (cả 2 chiều), `refresh_media`, `replace_clip_media` (fix cũ `changeMediaFilePath` xác nhận đúng), `set_scale_to_frame_size`.
+
+**🐛 Bug 1 (ĐÃ FIX) — `invert_selection`/`select_all_clips`/`select_clips_in_range` CỘNG DỒN thay vì thay thế selection**: `sequence.setSelection(selectionObj)` không tự clear selection cũ — `_buildSelectionObject()` lấy `sequence.getSelection()` HIỆN TẠI rồi addItem thêm vào (không phải object rỗng mới), nên "invert" thực ra chỉ ADD phần bù vào, kết quả chọn nhầm cả 2 tập. Live-test: chọn clip1+2 (2/3 clip) → gọi `invert_selection` → kỳ vọng chỉ clip3, thực tế chọn CẢ 3. Đã fix: thêm `sequence.clearSelection()` trước khi build selection mới ở cả 3 hàm (`invertSelection`, `selectAllClips`, `selectClipsInRange`). Live-test lại: đúng cả 3, verify độc lập qua `get_selected_clips`.
+
+**🐛 Bug 2 (ĐÃ FIX) — `set_footage_interpretation`/`get_footage_interpretation` đọc/ghi sai hoàn toàn field**: object trả về từ `cpi.getFootageInterpretation()` KHÔNG PHẢI plain object `{frameRate, pixelAspectRatio}` — là object có method `getFrameRate()/setFrameRate()/getPixelAspectRatio()/setPixelAspectRatio()`. Code cũ đọc field trực tiếp → luôn `undefined`; set field trực tiếp → "Illegal Parameter type". Đã fix dùng đúng getter/setter. **Phát hiện thêm, quan trọng**: `setFrameRate()` nhận SỐ THÔ (không phải object `ppro.FrameRate` như `Sequence.setVideoFrameRate`) — ngược pattern đã biết. **Bug phụ nghiêm trọng hơn**: partial-update (chỉ set 1 trong 2 field, kể cả khi đọc field còn lại qua getter trước rồi set lại tường minh) cho kết quả SAI KHÓ LƯỜNG qua live-test lặp lại (field không đổi bị revert về giá trị native gốc hoặc giá trị CŨ HƠN) — nguyên nhân gốc chưa rõ, không đáng công điều tra sâu thêm. Giải pháp: BẮT BUỘC truyền cả 2 field trong 1 lần gọi (đã đổi `required` ở server schema) — verify ổn định qua nhiều lần lặp độc lập khi làm vậy.
+
+**🟡 Phát hiện giới hạn thật (không phải bug) — `set_offline(offline:false)` KHÔNG khôi phục online được**: `createSetOfflineAction(true)` hoạt động đúng, nhưng gọi lại `(false)` không đổi trạng thái thật (verify qua object cpi hoàn toàn mới để loại trừ cache — vẫn offline). Khớp hành vi Premiere thật: "Media Offline" cần relink (trỏ lại path thật), không phải đảo 1 cờ boolean. Phải dùng `relink_offline_media` (hiện là stub hướng dẫn thủ công, KHÔNG tự động) hoặc Link Media tay trong UI để khôi phục.
+
+**🐛 Bug 3 (ĐÃ FIX chữ ký, hành vi thật CHƯA XÁC NHẬN) — `attach_proxy` thiếu tham số**: `cpi.attachProxy(path)` ném "Not Enough Parameters" — chữ ký đúng cần 2 tham số `(path, boolean)`, cả `(path,false)` và `(path,true)` đều không lỗi. Đã thêm param `isHiRes` (mặc định false, ý nghĩa thật CHƯA xác nhận). Test bằng ảnh PNG giả không phải video proxy hợp lệ nên `get_proxy_info` đọc lại vẫn `hasProxy:false` dù không lỗi — **cần test lại với file .mp4 thật** để xác nhận đầy đủ.
+
+**🔴 CHƯA giải quyết được — `set_item_in_out`/`create_subclip` nghi ngờ chỉ hoạt động với VIDEO, không phải ảnh tĩnh**: `cpi.createSetInOutPointsAction(TickTime,TickTime)` — chữ ký ĐÚNG (xác nhận qua 1 lần gọi thành công), nhưng gọi lại (kể cả trên item khác hoàn toàn sạch, `WAG.TQUY.png`) ném lỗi native `"The script object is no longer valid."` phát sinh từ bên trong wrapper (`getMasterClipFromProjectItemSync(this)` trước khi tạo action) — nghi ngờ ảnh tĩnh không có "MasterClip" hợp lệ. `create_subclip`: chữ ký ĐÚNG là 4 tham số `(name, TickTime, TickTime, boolean)` (thiếu tham số 4 ném "Not Enough Parameters"; gọi ngoài `project.lockedAccess()` ném "Requires locked access" — đã fix cả 2). Nhưng chạy xong KHÔNG lỗi mà KHÔNG tạo ra subclip thật (verify qua `find_project_item_by_name` → `found:false`) — lỗi bị "nuốt" im lặng, cùng nghi ngờ giới hạn MasterClip/ảnh tĩnh. **Việc cần làm tiếp**: test lại cả 2 tool với 1 file video thật (.mp4/.mov) — phiên này không có sẵn file video an toàn để test. Nếu xác nhận đúng là giới hạn "chỉ video" thì cần ghi rõ trong description tool, không phải bug cần fix thêm.
+
+**Tool CHƯA live-test trong đợt này** (do không có file video an toàn sẵn để test kỹ, độ ưu tiên thấp hơn): không còn — toàn bộ 19 tool trong batch đã được gọi live-test ít nhất 1 lần.
+
+
 ## ⚠️ RỦI RO CAO — probe `createAddVideoTransitionAction` làm TREO Premiere thật (2026-09-15)
 
 Trong lúc điều tra xem `add_transition` (hiện là stub báo "UXP chưa có API") có thật sự đúng không — probe phát hiện `ppro.TransitionFactory.createVideoTransition(matchName)` CÓ THẬT (tạo ra 1 component transition object hợp lệ, khác với `TransitionFactory.createTransition` không tồn tại). Nhưng khi thử gọi `clip.createAddVideoTransitionAction(transitionComp, <biến thể tham số thứ 2>)` với 5 biến thể liên tiếp trong 1 lần gọi (string "start", TickTime, boolean, number, không tham số) — **Premiere Pro treo hẳn (not responding)**, phải đợi user tự đóng/mở lại app mới phục hồi được (project tự động khôi phục đúng trạng thái đã save trước đó, không mất dữ liệu thật).
