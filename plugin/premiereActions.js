@@ -2883,6 +2883,35 @@ async function setSequenceInOutPoints({ inSeconds, outSeconds }) {
   return { inSeconds: actualIn, outSeconds: actualOut };
 }
 
+// API xác nhận qua probe prototype Sequence trước đó (cùng đợt tìm ra getPlayerPosition/setPlayerPosition):
+// getZeroPoint()/createSetZeroPointAction(). Cùng pattern get/set in-out point, an toàn.
+async function getZeroPoint() {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  const zp = await sequence.getZeroPoint();
+  return { seconds: zp.seconds };
+}
+
+async function setZeroPoint({ seconds }) {
+  if (seconds == null) throw new Error("Phải truyền seconds.");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(sequence.createSetZeroPointAction(secondsToTick(seconds)));
+    }, "Set sequence zero point qua MCP");
+  });
+
+  const actualSeconds = (await sequence.getZeroPoint()).seconds;
+  return { seconds, actualSeconds };
+}
+
 async function setClipPan({ panValue }, log) {
   const { project, clip } = await getActiveSequenceAndSelection(log);
 

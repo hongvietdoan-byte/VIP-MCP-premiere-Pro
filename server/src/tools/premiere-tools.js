@@ -2038,5 +2038,32 @@ export const PREMIERE_TOOLS = [
         trackIndex: args.trackIndex, trackType: args.trackType, selected: args.selected
       }, 15000);
     }
+  },
+
+  // ==========================================================================
+  // GROUP 28 — Sequence Zero Point (2026-09-15)
+  // ==========================================================================
+  {
+    name: 'get_zero_point',
+    description: 'Đọc timecode bắt đầu (zero point) của sequence đang active.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('get_zero_point', {}, 15000);
+    }
+  },
+
+  {
+    name: 'set_zero_point',
+    description: 'Đặt timecode bắt đầu (zero point) của sequence đang active.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        seconds: { type: 'number', description: 'Giá trị zero point mới (giây).' }
+      },
+      required: ['seconds']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_zero_point', { seconds: args.seconds }, 15000);
+    }
   }
 ];
