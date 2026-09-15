@@ -1,6 +1,16 @@
 # TODO — Premiere MCP
 
-Cập nhật lần cuối: 2026-09-14. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
+Cập nhật lần cuối: 2026-09-15. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
+
+## 🔨 5 tool Bin & Project Item nâng cao mới — ĐÃ CODE, CHỜ RESTART ĐỂ LIVE-TEST (2026-09-15)
+
+Tiếp tục nhóm 4 (Bin & project item management) từ `AUDIT_MASTER_TOOL_LIST.md`. Probe trực tiếp prototype `ProjectItem`/`FolderItem` (hijack tạm `get_project_info`, không cần restart) xác nhận:
+- `ProjectItem.createSetNameAction()` → `rename_project_item` khả thi (đổi tên cả clip lẫn bin, cùng API).
+- `FolderItem/rootItem.createRemoveItemAction()` → `delete_project_item` khả thi.
+- Bonus phát hiện (chưa dùng): `createSmartBinAction()`, `createRenameBinAction()` — có thể dùng cho `create_smart_bin` nếu làm tiếp, nhưng chưa rõ signature tham số search criteria nên chưa code.
+- `get_bin_contents`/`find_project_item_by_name`/`get_project_item_info` dựng trên `findProjectItemByName()` đã có sẵn từ trước (đệ quy qua bin con) — không cần API mới.
+
+**Cần restart app Claude** để nạp schema mới.
 
 ## ✅ 4 tool Playhead & Sequence In/Out — ĐÃ LIVE-TEST ĐÚNG, KHÔNG BUG (2026-09-14)
 

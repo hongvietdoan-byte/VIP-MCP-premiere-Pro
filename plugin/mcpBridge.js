@@ -217,7 +217,9 @@ function _sendReadyMessage() {
                    "get_effect_properties", "remove_all_effects",
                    "get_clip_volume", "set_clip_mute",
                    "get_playhead_position", "set_playhead_position",
-                   "get_sequence_in_out_points", "set_sequence_in_out_points"]
+                   "get_sequence_in_out_points", "set_sequence_in_out_points",
+                   "rename_project_item", "delete_project_item", "get_bin_contents",
+                   "find_project_item_by_name", "get_project_item_info"]
   }));
 }
 
@@ -380,6 +382,13 @@ async function _dispatchCommand(msg) {
       case "set_clip_rotation":      result = await setClipRotation(params, bLog);                 break;
       case "set_clip_opacity":       result = await setClipOpacity(params, bLog);                  break;
       case "get_clip_transform":     result = await getClipTransform(params, bLog);                break;
+
+      // Group 26: Bin & Project Item nâng cao (2026-09-14)
+      case "rename_project_item":    result = await renameProjectItem(params);                    break;
+      case "delete_project_item":    result = await deleteProjectItem(params);                    break;
+      case "get_bin_contents":       result = await getBinContents(params);                       break;
+      case "find_project_item_by_name": result = await findProjectItemByNameTool(params);          break;
+      case "get_project_item_info":  result = await getProjectItemInfo(params);                   break;
 
       // Group 21: Xoá theo lựa chọn/khoảng thời gian (2026-09-14)
       case "remove_selected_clips":  result = await removeSelectedClips(params, bLog);             break;

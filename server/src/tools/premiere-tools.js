@@ -1925,5 +1925,84 @@ export const PREMIERE_TOOLS = [
     execute(wsBridge, args) {
       return wsBridge.sendCommand('set_sequence_in_out_points', { inSeconds: args.inSeconds, outSeconds: args.outSeconds }, 15000);
     }
+  },
+
+  // ==========================================================================
+  // GROUP 26 — Bin & Project Item nâng cao (2026-09-14)
+  // ==========================================================================
+  {
+    name: 'rename_project_item',
+    description: 'Đổi tên 1 item (clip/bin) trong Project panel theo tên hiện tại. Tìm kể cả trong bin con.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        itemName: { type: 'string', description: 'Tên hiện tại của item trong Project panel.' },
+        newName: { type: 'string', description: 'Tên mới.' }
+      },
+      required: ['itemName', 'newName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('rename_project_item', { itemName: args.itemName, newName: args.newName }, 15000);
+    }
+  },
+
+  {
+    name: 'delete_project_item',
+    description: 'Xoá 1 item (clip/bin) khỏi Project panel theo tên. Tìm kể cả trong bin con. Không thể hoàn tác qua MCP.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        itemName: { type: 'string', description: 'Tên item cần xoá.' }
+      },
+      required: ['itemName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('delete_project_item', { itemName: args.itemName }, 15000);
+    }
+  },
+
+  {
+    name: 'get_bin_contents',
+    description: 'Liệt kê nội dung (tên + loại bin/clip) của 1 bin cụ thể trong Project panel.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        binName: { type: 'string', description: 'Tên bin cần đọc nội dung.' }
+      },
+      required: ['binName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('get_bin_contents', { binName: args.binName }, 15000);
+    }
+  },
+
+  {
+    name: 'find_project_item_by_name',
+    description: 'Tìm 1 item (clip/bin) trong Project panel theo tên, kể cả trong bin con. Trả về found:true/false.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        itemName: { type: 'string', description: 'Tên item cần tìm.' }
+      },
+      required: ['itemName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('find_project_item_by_name', { itemName: args.itemName }, 15000);
+    }
+  },
+
+  {
+    name: 'get_project_item_info',
+    description: 'Đọc thông tin chi tiết 1 item trong Project panel: tên, có phải bin không, color label, đường dẫn media (nếu là clip).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        itemName: { type: 'string', description: 'Tên item cần đọc.' }
+      },
+      required: ['itemName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('get_project_item_info', { itemName: args.itemName }, 15000);
+    }
   }
 ];

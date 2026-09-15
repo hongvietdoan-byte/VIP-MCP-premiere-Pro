@@ -3490,6 +3490,101 @@ async function moveItemToBin({ clipName, targetBin }) {
   return { moved: true, clipName, targetBin };
 }
 
+// ============================================================================
+// GROUP — Bin & Project Item nâng cao (2026-09-14) — API xác nhận qua probe trực tiếp prototype
+// ProjectItem (createSetNameAction) và FolderItem/rootItem (createRemoveItemAction,
+// createSmartBinAction, createRenameBinAction). Tái dùng findProjectItemByName (đệ quy qua bin con,
+// đã có sẵn từ trước) thay vì chỉ tìm ở root như moveItemToBin cũ.
+// ============================================================================
+
+async function renameProjectItem({ itemName, newName }) {
+  if (!itemName || !newName) throw new Error("Phải truyền itemName và newName.");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+
+  const item = await findProjectItemByName(project, itemName);
+  if (!item) throw new Error(`Không tìm thấy item "${itemName}" trong Project panel.`);
+
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(item.createSetNameAction(newName));
+    }, "Đổi tên project item qua MCP");
+  });
+
+  return { renamed: true, itemName, newName, actualName: item.name };
+}
+
+async function deleteProjectItem({ itemName }) {
+  if (!itemName) throw new Error("Phải truyền itemName.");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+
+  const rootItem = await project.getRootItem();
+  const item = await findProjectItemByName(project, itemName);
+  if (!item) throw new Error(`Không tìm thấy item "${itemName}" trong Project panel.`);
+
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(rootItem.createRemoveItemAction(item));
+    }, "Xoá project item qua MCP");
+  });
+
+  const stillThere = await findProjectItemByName(project, itemName);
+  return { deleted: !stillThere, itemName };
+}
+
+async function getBinContents({ binName }) {
+  if (!binName) throw new Error("Phải truyền binName.");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+
+  const bin = await findProjectItemByName(project, binName);
+  if (!bin) throw new Error(`Không tìm thấy bin "${binName}" trong Project panel.`);
+  const folder = await ppro.FolderItem.cast(bin);
+  if (!folder) throw new Error(`"${binName}" không phải là bin/folder.`);
+
+  const items = (await folder.getItems()) || [];
+  const result = [];
+  for (const it of items) {
+    let isBin = false;
+    try { isBin = !!(await ppro.FolderItem.cast(it)); } catch {}
+    result.push({ name: it.name, isBin });
+  }
+  return { binName, count: result.length, items: result };
+}
+
+async function findProjectItemByNameTool({ itemName }) {
+  if (!itemName) throw new Error("Phải truyền itemName.");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+
+  const item = await findProjectItemByName(project, itemName);
+  if (!item) return { found: false, itemName };
+  let isBin = false;
+  try { isBin = !!(await ppro.FolderItem.cast(item)); } catch {}
+  return { found: true, itemName, name: item.name, isBin };
+}
+
+async function getProjectItemInfo({ itemName }) {
+  if (!itemName) throw new Error("Phải truyền itemName.");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+
+  const item = await findProjectItemByName(project, itemName);
+  if (!item) throw new Error(`Không tìm thấy item "${itemName}" trong Project panel.`);
+
+  const out = { name: item.name };
+  try { out.isBin = !!(await ppro.FolderItem.cast(item)); } catch { out.isBin = false; }
+  try { out.colorLabelIndex = await item.getColorLabelIndex(); } catch {}
+  if (!out.isBin) {
+    try {
+      const cpi = await ppro.ClipProjectItem.cast(item);
+      if (cpi) out.mediaFilePath = await cpi.getMediaFilePath();
+    } catch {}
+  }
+  return out;
+}
+
 async function replaceClipMedia({ newFilePath }, log) {
   if (!newFilePath) throw new Error("Phải truyền newFilePath.");
   const { project, clip } = await getActiveSequenceAndSelection(log);
