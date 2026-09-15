@@ -17,8 +17,14 @@ Theo yêu cầu user "cứ note lại nhóm này đợi restart 1 lần tổng t
 1. **Nhóm 4 — Bin & Project Item nâng cao** (5 tool, xem mục cũ phía dưới): `rename_project_item`, `delete_project_item`, `get_bin_contents`, `find_project_item_by_name`, `get_project_item_info`.
 2. **Nhóm 10 — Selection nâng cao** (2 tool, mới thêm 2026-09-15): `invert_selection` (đảo ngược selection hiện tại, dựng hoàn toàn trên primitive đọc/chọn đã verify — không gọi action lạ nào, an toàn), `set_clip_selection` (chọn/bỏ chọn 1 clip cụ thể không ảnh hưởng clip khác đang chọn — nhánh bỏ chọn dùng đường an toàn clearSelection()+rebuild vì chưa xác nhận `TrackItemSelection` có `removeItem()` hay không).
 3. **Nhóm 5 — Sequence Zero Point** (2 tool, mới thêm 2026-09-15): `get_zero_point`/`set_zero_point` — API xác nhận từ probe `Sequence` cũ (`getZeroPoint()`/`createSetZeroPointAction()`), cùng pattern an toàn với get/set_sequence_in_out_points đã live-tested đúng.
+4. **Nhóm 4/6 — Proxy & Footage nâng cao** (7 tool mới + 1 FIX, mới thêm 2026-09-15): probe trực tiếp prototype `ClipProjectItem` (hijack tạm `get_project_info`) phát hiện RẤT NHIỀU API xác nhận thật, trước đây tưởng không có tool nào (nhóm Proxy workflow ghi "0 tool hiện có"):
+   - **FIX quan trọng**: `replace_clip_media` cũ dùng sai tên method `changeMediaSource` (không tồn tại, luôn rơi vào nhánh báo lỗi thủ công) — tên đúng là `changeMediaFilePath(path)`, gọi trực tiếp không qua transaction. Chưa live-test lại sau fix.
+   - `get_proxy_info`/`attach_proxy`/`refresh_media` — qua `hasProxy()`/`getProxyPath()`/`attachProxy()`/`refreshMedia()`, gọi trực tiếp (không action-based).
+   - `set_offline`/`get_footage_interpretation`/`set_footage_interpretation`/`set_scale_to_frame_size` — qua `createSetOfflineAction`/`getFootageInterpretation`/`createSetFootageInterpretationAction`/`createSetScaleToFrameSizeAction`, action-based qua executeTransaction (cùng pattern an toàn đã dùng ở hàng chục tool khác — KHÔNG phải dạng `createAddVideoTransitionAction` từng gây treo máy).
+   - **Chưa code** (tìm thấy API nhưng để dành đợt sau vì chưa rõ chữ ký tham số, tránh đoán mù sau sự cố treo máy): `createSubClipAction` (create_subclip), `createSetOverrideFrameRateAction`/`createSetOverridePixelAspectRatioAction`, `createSetInOutPointsAction`/`createClearInOutPointsAction` (clear/set_item_in_out ở cấp project item, khác in/out cấp sequence đã làm).
+   - Xác nhận **không có** API `App.getAppVersion` — `get_version_info`/`get_app_version` KHÔNG khả thi qua UXP, loại khỏi kế hoạch.
 
-**Cần restart app Claude 1 lần** để nạp toàn bộ schema mới (9 tool) trước khi live-test tất cả cùng lúc.
+**Cần restart app Claude 1 lần** để nạp toàn bộ schema mới (16 tool + 1 fix) trước khi live-test tất cả cùng lúc.
 
 ## 🔨 5 tool Bin & Project Item nâng cao mới — ĐÃ CODE, CHỜ RESTART ĐỂ LIVE-TEST (2026-09-15)
 

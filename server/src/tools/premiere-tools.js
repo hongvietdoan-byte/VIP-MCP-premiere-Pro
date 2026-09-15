@@ -2065,5 +2065,96 @@ export const PREMIERE_TOOLS = [
     execute(wsBridge, args) {
       return wsBridge.sendCommand('set_zero_point', { seconds: args.seconds }, 15000);
     }
+  },
+
+  // ==========================================================================
+  // GROUP 29 — Proxy / Footage nâng cao (2026-09-15)
+  // ==========================================================================
+  {
+    name: 'get_proxy_info',
+    description: 'Đọc thông tin proxy của clip đang chọn: đã có proxy chưa, đường dẫn proxy nếu có.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('get_proxy_info', {}, 15000);
+    }
+  },
+
+  {
+    name: 'attach_proxy',
+    description: 'Gắn file proxy cho clip đang chọn.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        proxyFilePath: { type: 'string', description: 'Đường dẫn tuyệt đối file proxy.' }
+      },
+      required: ['proxyFilePath']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('attach_proxy', { proxyFilePath: args.proxyFilePath }, 20000);
+    }
+  },
+
+  {
+    name: 'refresh_media',
+    description: 'Tải lại media từ đĩa cho clip đang chọn (sau khi file gốc bị thay đổi bên ngoài Premiere).',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('refresh_media', {}, 20000);
+    }
+  },
+
+  {
+    name: 'set_offline',
+    description: 'Đưa clip đang chọn vào trạng thái offline hoặc khôi phục online lại.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        offline: { type: 'boolean', description: 'true = đưa offline, false = khôi phục online.' }
+      },
+      required: ['offline']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_offline', { offline: args.offline }, 15000);
+    }
+  },
+
+  {
+    name: 'get_footage_interpretation',
+    description: 'Đọc frame rate và pixel aspect ratio đang được diễn giải (interpret) cho clip đang chọn.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('get_footage_interpretation', {}, 15000);
+    }
+  },
+
+  {
+    name: 'set_footage_interpretation',
+    description: 'Đổi cách diễn giải (interpret) frame rate và/hoặc pixel aspect ratio của clip đang chọn — không đổi file gốc, chỉ đổi cách Premiere đọc nó.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        frameRate: { type: 'number', description: 'Frame rate mới để diễn giải (fps). Bỏ trống nếu chỉ đổi pixelAspectRatio.' },
+        pixelAspectRatio: { type: 'number', description: 'Pixel aspect ratio mới. Bỏ trống nếu chỉ đổi frameRate.' }
+      },
+      required: []
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_footage_interpretation', { frameRate: args.frameRate, pixelAspectRatio: args.pixelAspectRatio }, 15000);
+    }
+  },
+
+  {
+    name: 'set_scale_to_frame_size',
+    description: 'Bật/tắt "Scale to Frame Size" cho clip đang chọn (tự scale media vừa khung hình sequence).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        scaleToFrameSize: { type: 'boolean', description: 'true = bật, false = tắt.' }
+      },
+      required: ['scaleToFrameSize']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_scale_to_frame_size', { scaleToFrameSize: args.scaleToFrameSize }, 15000);
+    }
   }
 ];

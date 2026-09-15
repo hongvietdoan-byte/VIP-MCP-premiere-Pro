@@ -3614,23 +3614,110 @@ async function getProjectItemInfo({ itemName }) {
   return out;
 }
 
+// FIX 2026-09-15: `changeMediaSource` KHÔNG tồn tại trên ClipProjectItem (tên đoán sai, chưa từng
+// verify) — xác nhận qua probe trực tiếp prototype: tên đúng là `changeMediaFilePath(path)`, gọi
+// trực tiếp (không qua executeTransaction, không có prefix "create...Action" nên không phải action).
 async function replaceClipMedia({ newFilePath }, log) {
   if (!newFilePath) throw new Error("Phải truyền newFilePath.");
-  const { project, clip } = await getActiveSequenceAndSelection(log);
+  const { clip } = await getActiveSequenceAndSelection(log);
 
-  try {
-    const projectItem = await clip.getProjectItem();
-    if (typeof projectItem.changeMediaSource === "function") {
-      await projectItem.changeMediaSource(newFilePath);
-      return { replaced: true, newFilePath, newFileName: newFilePath.split(/[\\/]/).pop() };
-    }
-    return {
-      replaced: false,
-      message: "projectItem.changeMediaSource() không khả dụng. Relink thủ công: chuột phải clip trong Project panel → Replace Footage."
-    };
-  } catch (e) {
-    throw new Error(`Replace clip media thất bại: ${e.message}`);
+  const projectItem = await clip.getProjectItem();
+  const cpi = await ppro.ClipProjectItem.cast(projectItem);
+  if (!cpi || typeof cpi.changeMediaFilePath !== "function") {
+    throw new Error("changeMediaFilePath() không khả dụng trên item này. Relink thủ công: chuột phải clip trong Project panel → Replace Footage.");
   }
+
+  await cpi.changeMediaFilePath(newFilePath);
+  const actualPath = await cpi.getMediaFilePath();
+  return { replaced: true, newFilePath, actualPath, newFileName: newFilePath.split(/[\\/]/).pop() };
+}
+
+// ============================================================================
+// GROUP — Proxy / Footage nâng cao (2026-09-15) — API xác nhận qua probe trực tiếp prototype
+// ClipProjectItem: hasProxy/getProxyPath/attachProxy/refreshMedia/changeMediaFilePath (gọi trực
+// tiếp, KHÔNG qua executeTransaction — không có prefix "create...Action"), createSetOfflineAction/
+// createSetFootageInterpretationAction/createSetScaleToFrameSizeAction/createSubClipAction (action-
+// based, qua executeTransaction giống mọi action khác đã verify).
+// ============================================================================
+
+async function getClipProjectItemForSelected(log) {
+  const { project, clip } = await getActiveSequenceAndSelection(log);
+  const projectItem = await clip.getProjectItem();
+  const cpi = await ppro.ClipProjectItem.cast(projectItem);
+  if (!cpi) throw new Error("Clip đang chọn không phải clip media hợp lệ.");
+  return { project, cpi };
+}
+
+async function getProxyInfo(_params, log) {
+  const { cpi } = await getClipProjectItemForSelected(log);
+  const hasProxy = await cpi.hasProxy();
+  let proxyPath = null;
+  if (hasProxy) { try { proxyPath = await cpi.getProxyPath(); } catch {} }
+  return { hasProxy, proxyPath };
+}
+
+async function attachProxy({ proxyFilePath }, log) {
+  if (!proxyFilePath) throw new Error("Phải truyền proxyFilePath.");
+  const { cpi } = await getClipProjectItemForSelected(log);
+  await cpi.attachProxy(proxyFilePath);
+  const actualHasProxy = await cpi.hasProxy();
+  let actualProxyPath = null;
+  try { actualProxyPath = await cpi.getProxyPath(); } catch {}
+  return { attached: actualHasProxy, proxyFilePath, actualProxyPath };
+}
+
+async function refreshMediaTool(_params, log) {
+  const { cpi } = await getClipProjectItemForSelected(log);
+  await cpi.refreshMedia();
+  return { refreshed: true };
+}
+
+async function setOfflineTool({ offline }, log) {
+  if (offline == null) throw new Error("Phải truyền offline (true/false).");
+  const { project, cpi } = await getClipProjectItemForSelected(log);
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(cpi.createSetOfflineAction(offline));
+    }, "Set offline qua MCP");
+  });
+  const actualOffline = await cpi.isOffline();
+  return { offline, actualOffline };
+}
+
+async function getFootageInterpretation(_params, log) {
+  const { cpi } = await getClipProjectItemForSelected(log);
+  const fi = await cpi.getFootageInterpretation();
+  return { frameRate: fi.frameRate, pixelAspectRatio: fi.pixelAspectRatio };
+}
+
+async function setFootageInterpretation({ frameRate, pixelAspectRatio }, log) {
+  if (frameRate == null && pixelAspectRatio == null) {
+    throw new Error("Phải truyền ít nhất frameRate hoặc pixelAspectRatio.");
+  }
+  const { project, cpi } = await getClipProjectItemForSelected(log);
+  const current = await cpi.getFootageInterpretation();
+  const newFi = {
+    frameRate: frameRate != null ? frameRate : current.frameRate,
+    pixelAspectRatio: pixelAspectRatio != null ? pixelAspectRatio : current.pixelAspectRatio
+  };
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(cpi.createSetFootageInterpretationAction(newFi));
+    }, "Set footage interpretation qua MCP");
+  });
+  const actual = await cpi.getFootageInterpretation();
+  return { frameRate: actual.frameRate, pixelAspectRatio: actual.pixelAspectRatio };
+}
+
+async function setScaleToFrameSize({ scaleToFrameSize }, log) {
+  if (scaleToFrameSize == null) throw new Error("Phải truyền scaleToFrameSize (true/false).");
+  const { project, cpi } = await getClipProjectItemForSelected(log);
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(cpi.createSetScaleToFrameSizeAction(scaleToFrameSize));
+    }, "Set scale to frame size qua MCP");
+  });
+  return { applied: true, scaleToFrameSize };
 }
 
 async function relinkOfflineMedia({ searchFolder }) {

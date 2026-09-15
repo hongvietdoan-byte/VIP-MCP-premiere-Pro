@@ -221,7 +221,9 @@ function _sendReadyMessage() {
                    "rename_project_item", "delete_project_item", "get_bin_contents",
                    "find_project_item_by_name", "get_project_item_info",
                    "invert_selection", "set_clip_selection",
-                   "get_zero_point", "set_zero_point"]
+                   "get_zero_point", "set_zero_point",
+                   "get_proxy_info", "attach_proxy", "refresh_media", "set_offline",
+                   "get_footage_interpretation", "set_footage_interpretation", "set_scale_to_frame_size"]
   }));
 }
 
@@ -392,6 +394,15 @@ async function _dispatchCommand(msg) {
       // Group 28: Sequence Zero Point (2026-09-15)
       case "get_zero_point":         result = await getZeroPoint();                                break;
       case "set_zero_point":         result = await setZeroPoint(params);                          break;
+
+      // Group 29: Proxy / Footage nâng cao (2026-09-15)
+      case "get_proxy_info":         result = await getProxyInfo(params, bLog);                    break;
+      case "attach_proxy":           result = await attachProxy(params, bLog);                     break;
+      case "refresh_media":          result = await refreshMediaTool(params, bLog);                break;
+      case "set_offline":            result = await setOfflineTool(params, bLog);                  break;
+      case "get_footage_interpretation": result = await getFootageInterpretation(params, bLog);    break;
+      case "set_footage_interpretation": result = await setFootageInterpretation(params, bLog);    break;
+      case "set_scale_to_frame_size": result = await setScaleToFrameSize(params, bLog);             break;
 
       // Group 26: Bin & Project Item nâng cao (2026-09-14)
       case "rename_project_item":    result = await renameProjectItem(params);                    break;
