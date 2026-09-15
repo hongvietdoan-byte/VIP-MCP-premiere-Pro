@@ -223,7 +223,8 @@ function _sendReadyMessage() {
                    "invert_selection", "set_clip_selection",
                    "get_zero_point", "set_zero_point",
                    "get_proxy_info", "attach_proxy", "refresh_media", "set_offline",
-                   "get_footage_interpretation", "set_footage_interpretation", "set_scale_to_frame_size"]
+                   "get_footage_interpretation", "set_footage_interpretation", "set_scale_to_frame_size",
+                   "set_item_in_out", "clear_item_in_out", "create_subclip"]
   }));
 }
 
@@ -403,6 +404,9 @@ async function _dispatchCommand(msg) {
       case "get_footage_interpretation": result = await getFootageInterpretation(params, bLog);    break;
       case "set_footage_interpretation": result = await setFootageInterpretation(params, bLog);    break;
       case "set_scale_to_frame_size": result = await setScaleToFrameSize(params, bLog);             break;
+      case "set_item_in_out":        result = await setItemInOut(params);                          break;
+      case "clear_item_in_out":      result = await clearItemInOut(params);                        break;
+      case "create_subclip":         result = await createSubclip(params);                         break;
 
       // Group 26: Bin & Project Item nâng cao (2026-09-14)
       case "rename_project_item":    result = await renameProjectItem(params);                    break;

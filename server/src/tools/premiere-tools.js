@@ -2156,5 +2156,55 @@ export const PREMIERE_TOOLS = [
     execute(wsBridge, args) {
       return wsBridge.sendCommand('set_scale_to_frame_size', { scaleToFrameSize: args.scaleToFrameSize }, 15000);
     }
+  },
+
+  {
+    name: 'set_item_in_out',
+    description: 'Đặt in/out điểm nguồn của 1 project item (khác in/out của clip trên timeline). CHƯA LIVE-TEST chữ ký tham số native.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        itemName: { type: 'string', description: 'Tên project item trong Project panel.' },
+        inSeconds: { type: 'number', description: 'Điểm in mới (giây).' },
+        outSeconds: { type: 'number', description: 'Điểm out mới (giây).' }
+      },
+      required: ['itemName', 'inSeconds', 'outSeconds']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_item_in_out', { itemName: args.itemName, inSeconds: args.inSeconds, outSeconds: args.outSeconds }, 15000);
+    }
+  },
+
+  {
+    name: 'clear_item_in_out',
+    description: 'Xoá in/out điểm nguồn tuỳ chỉnh của 1 project item, về lại mặc định (dùng toàn bộ file). CHƯA LIVE-TEST chữ ký tham số native.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        itemName: { type: 'string', description: 'Tên project item trong Project panel.' }
+      },
+      required: ['itemName']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('clear_item_in_out', { itemName: args.itemName }, 15000);
+    }
+  },
+
+  {
+    name: 'create_subclip',
+    description: 'Tạo subclip mới từ 1 project item với in/out chỉ định — subclip xuất hiện như 1 item riêng trong Project panel. CHƯA LIVE-TEST chữ ký tham số native.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        itemName: { type: 'string', description: 'Tên project item gốc.' },
+        inSeconds: { type: 'number', description: 'Điểm in của subclip (giây).' },
+        outSeconds: { type: 'number', description: 'Điểm out của subclip (giây).' },
+        newName: { type: 'string', description: 'Tên subclip mới. Bỏ trống = tự đặt tên.' }
+      },
+      required: ['itemName', 'inSeconds', 'outSeconds']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('create_subclip', { itemName: args.itemName, inSeconds: args.inSeconds, outSeconds: args.outSeconds, newName: args.newName }, 20000);
+    }
   }
 ];

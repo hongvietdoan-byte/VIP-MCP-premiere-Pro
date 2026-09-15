@@ -3720,6 +3720,69 @@ async function setScaleToFrameSize({ scaleToFrameSize }, log) {
   return { applied: true, scaleToFrameSize };
 }
 
+// Tìm ClipProjectItem theo TÊN project item (khác getClipProjectItemForSelected — không cần clip
+// đang chọn trên timeline, thao tác thẳng trên item trong Project panel).
+async function getClipProjectItemByName(itemName) {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const item = await findProjectItemByName(project, itemName);
+  if (!item) throw new Error(`Không tìm thấy item "${itemName}" trong Project panel.`);
+  const cpi = await ppro.ClipProjectItem.cast(item);
+  if (!cpi) throw new Error(`"${itemName}" không phải là clip media hợp lệ.`);
+  return { project, cpi };
+}
+
+// ⚠️ CHỮ KÝ TRUYỀN VÀO createSetInOutPointsAction/createClearInOutPointsAction/createSubClipAction
+// CHƯA ĐƯỢC LIVE-TEST — chỉ dựa trên quy ước phổ biến của các action khác trong cùng file (nhận
+// trực tiếp TickTime, không phải object). Cần verify kỹ khi live-test (xem TODO.md).
+async function setItemInOut({ itemName, inSeconds, outSeconds }) {
+  if (!itemName) throw new Error("Phải truyền itemName.");
+  if (inSeconds == null || outSeconds == null) throw new Error("Phải truyền inSeconds và outSeconds.");
+  const { project, cpi } = await getClipProjectItemByName(itemName);
+
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(cpi.createSetInOutPointsAction(secondsToTick(inSeconds), secondsToTick(outSeconds)));
+    }, "Set item in/out qua MCP");
+  });
+
+  const actualIn = (await cpi.getInPoint()).seconds;
+  const actualOut = (await cpi.getOutPoint()).seconds;
+  return { itemName, inSeconds: actualIn, outSeconds: actualOut };
+}
+
+async function clearItemInOut({ itemName }) {
+  if (!itemName) throw new Error("Phải truyền itemName.");
+  const { project, cpi } = await getClipProjectItemByName(itemName);
+
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      ca.addAction(cpi.createClearInOutPointsAction());
+    }, "Clear item in/out qua MCP");
+  });
+
+  return { cleared: true, itemName };
+}
+
+async function createSubclip({ itemName, inSeconds, outSeconds, newName }) {
+  if (!itemName) throw new Error("Phải truyền itemName.");
+  if (inSeconds == null || outSeconds == null) throw new Error("Phải truyền inSeconds và outSeconds.");
+  const { project, cpi } = await getClipProjectItemByName(itemName);
+
+  const subclipName = newName || `${itemName} subclip`;
+  let created = null;
+  await project.lockedAccess(() => {
+    project.executeTransaction((ca) => {
+      const action = cpi.createSubClipAction(subclipName, secondsToTick(inSeconds), secondsToTick(outSeconds));
+      created = action;
+      ca.addAction(action);
+    }, "Create subclip qua MCP");
+  });
+
+  const found = await findProjectItemByName(project, subclipName);
+  return { created: !!found, itemName, subclipName, inSeconds, outSeconds };
+}
+
 async function relinkOfflineMedia({ searchFolder }) {
   const project = await ppro.Project.getActiveProject();
   if (!project) throw new Error("Không tìm thấy project đang mở.");

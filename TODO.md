@@ -21,10 +21,10 @@ Theo yêu cầu user "cứ note lại nhóm này đợi restart 1 lần tổng t
    - **FIX quan trọng**: `replace_clip_media` cũ dùng sai tên method `changeMediaSource` (không tồn tại, luôn rơi vào nhánh báo lỗi thủ công) — tên đúng là `changeMediaFilePath(path)`, gọi trực tiếp không qua transaction. Chưa live-test lại sau fix.
    - `get_proxy_info`/`attach_proxy`/`refresh_media` — qua `hasProxy()`/`getProxyPath()`/`attachProxy()`/`refreshMedia()`, gọi trực tiếp (không action-based).
    - `set_offline`/`get_footage_interpretation`/`set_footage_interpretation`/`set_scale_to_frame_size` — qua `createSetOfflineAction`/`getFootageInterpretation`/`createSetFootageInterpretationAction`/`createSetScaleToFrameSizeAction`, action-based qua executeTransaction (cùng pattern an toàn đã dùng ở hàng chục tool khác — KHÔNG phải dạng `createAddVideoTransitionAction` từng gây treo máy).
-   - **Chưa code** (tìm thấy API nhưng để dành đợt sau vì chưa rõ chữ ký tham số, tránh đoán mù sau sự cố treo máy): `createSubClipAction` (create_subclip), `createSetOverrideFrameRateAction`/`createSetOverridePixelAspectRatioAction`, `createSetInOutPointsAction`/`createClearInOutPointsAction` (clear/set_item_in_out ở cấp project item, khác in/out cấp sequence đã làm).
    - Xác nhận **không có** API `App.getAppVersion` — `get_version_info`/`get_app_version` KHÔNG khả thi qua UXP, loại khỏi kế hoạch.
+5. **`set_item_in_out`/`clear_item_in_out`/`create_subclip`** (3 tool mới, mới thêm 2026-09-15): dùng `createSetInOutPointsAction`/`createClearInOutPointsAction`/`createSubClipAction` tìm thấy ở đợt trên. **⚠️ CHỮ KÝ THAM SỐ CHƯA ĐƯỢC XÁC NHẬN** (khác các action khác đã probe kỹ qua debug sentinel trước khi code — 3 tool này code trực tiếp theo suy đoán quy ước phổ biến trong file: nhận thẳng TickTime, không object) — vẫn action-based (không phải dạng `createAddVideoTransitionAction` gây treo máy) nên rủi ro treo máy thấp, nhưng CẦN live-test cẩn thận, có thể sai chữ ký và chỉ throw lỗi JS bình thường (không phải treo).
 
-**Cần restart app Claude 1 lần** để nạp toàn bộ schema mới (16 tool + 1 fix) trước khi live-test tất cả cùng lúc.
+**Cần restart app Claude 1 lần** để nạp toàn bộ schema mới (19 tool + 1 fix) trước khi live-test tất cả cùng lúc.
 
 ## 🔨 5 tool Bin & Project Item nâng cao mới — ĐÃ CODE, CHỜ RESTART ĐỂ LIVE-TEST (2026-09-15)
 
