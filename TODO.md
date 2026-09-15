@@ -2,6 +2,102 @@
 
 Cập nhật lần cuối: 2026-09-15. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
 
+## ✅ Verify LẦN CUỐI bản code đã dọn sạch (bỏ đoạn thử nhiều biến thể) — ĐÚNG (2026-09-15)
+
+Restart lần 3 sau khi dọn `create_subsequence`/`set_override_pixel_aspect_ratio` về đúng 1 nhánh code
+(bỏ vòng lặp thử biến thể). Live-test lại trên sequence cách ly mới (`MCP ToolTest10 2026-09-15`, đã
+xoá) xác nhận cả 2 vẫn đúng y hệt kết quả bản diagnostic. Sequence thật không bị đụng.
+
+## ✅ Fix + xác nhận `create_subsequence`/`set_override_pixel_aspect_ratio` — chữ ký thật tìm ra (2026-09-15)
+
+Dùng kỹ thuật mới: code tạm 1 vòng lặp thử NHIỀU biến thể tham số trong CÙNG 1 tool call (trả về biến
+thể nào thành công), thay vì đoán từng lần riêng lẻ tốn nhiều round-trip — hiệu quả hơn hẳn cách đoán
+tuần tự cũ. Dọn lại code về đúng 1 nhánh sau khi xác nhận.
+
+- **`set_override_pixel_aspect_ratio`** — chữ ký thật là `createSetOverridePixelAspectRatioAction(numerator: number, denominator: number)` — **2 THAM SỐ SỐ RIÊNG BIỆT**, không phải string "N:M" (dù `Constants.PixelAspectRatio` có sẵn hằng số đúng format này — hoá ra KHÔNG áp dụng cho API override, chỉ là trùng hợp format) hay số thô đơn lẻ. Verify: set `2` (→2:1) đọc lại qua `get_footage_interpretation` đúng `pixelAspectRatio:2`, khác default `1`.
+- **`create_subsequence`** — chữ ký thật là `sequence.createSubsequence(inSeconds: number, outSeconds: number, name: string)` — SỐ GIÂY THÔ (không phải Time/TickTime object từ `getInPoint()/getOutPoint()`), điểm đặt TRƯỚC tên. Phát hiện phụ quan trọng: **tham số `name` bị Premiere ÂM THẦM BỎ QUA** — sequence mới luôn tự đặt tên theo pattern `"{tên gốc}_Sub_01"` bất kể truyền gì. Đã ghi rõ trong tool description để không gây bất ngờ khi dùng — cần `get_sequence_count` sau để lấy tên thật nếu muốn thao tác tiếp trên subsequence vừa tạo. Verify: sequence mới xuất hiện đúng tên pattern, chứa đúng 1 clip khớp work area đã set.
+
+**Debug probe mở rộng (`debug_probe_api`) xác nhận thêm — "giếng" tool dễ THẬT SỰ ĐÃ CẠN**: không có
+API link/unlink giữa audio-video clip trên `VideoClipTrackItem` (không `get_clip_links`/
+`link_selection` được), không có API đổi TRACK của 1 clip đã đặt (`move_clip_to_track` không khả thi
+qua 1 action đơn — chỉ có `createMoveAction` đổi VỊ TRÍ THỜI GIAN, không đổi track), `cut_clip_at_time`
+hiện tại phụ thuộc QE DOM chưa được kiểm chứng nên không đáng tin cậy để dùng làm nền cho
+`razor_all_tracks`. Toàn bộ `_protoMethods` của `Project`/`Sequence`/`SequenceEditor`/`TrackItem`
+(qua `VideoClipTrackItem`)/`Track`(qua `VideoTrack`/`AudioTrack`)/`Application` không lộ thêm API
+track-management/blend-mode/adjustment-layer nào mới — khớp hoàn toàn các kết luận "không khả thi" đã
+ghi nhận từ trước.
+
+## ✅ 2 fix `match_frame`/`stabilize_clip` — LIVE-TEST XÁC NHẬN ĐÚNG SAU RESTART LẦN 2 (2026-09-15)
+
+⚠️ **Sự cố tự gây + tự fix ngay**: lần sửa `match_frame` đầu tiên khai báo TRÙNG `const sequence`/
+`const playhead` trong cùng function scope → SyntaxError làm TOÀN BỘ `premiereActions.js` không load
+được (biểu hiện lạ: lỗi không liên quan `"getActiveSequenceAndAllSelection is not defined"` ở
+`get_status`, vì cả file parse fail nên mọi function đều undefined). Phát hiện qua `get_status` lỗi bất
+thường ngay sau restart, sửa lại (bỏ khai báo trùng, tái dùng biến `playhead` đã có), restart lần 2 mới
+hết. **Bài học**: sau khi sửa code plugin, LUÔN gọi `get_status` ngay sau restart để phát hiện sớm lỗi
+parse toàn file — lỗi báo ra có thể hoàn toàn không liên quan tới function vừa sửa.
+
+Sau restart lần 2, live-test trên sequence cách ly (`MCP ToolTest7 2026-09-15`, đã xoá) xác nhận cả 2
+fix đều đúng:
+- `match_frame` — đổi tên clip trên timeline khác hẳn tên project item ("RenamedShot 1" vs
+  "WAG.PLS1.png") rồi gọi vẫn mở đúng Source Monitor (`opened:true`) — xác nhận fix dùng
+  `trackItem.getProjectItem()` trực tiếp hoạt động đúng, không còn phụ thuộc tên clip trùng tên item.
+- `stabilize_clip` — verify qua `get_clip_effects`: effect "Warp Stabilizer" (`AE.ADBE
+  SubspaceStabilizer`) áp thành công, đúng 32 param — matchName mới chính xác.
+
+## ✅ LIVE-TEST đợt 6 xong — 10 đúng, 2 bug xác nhận, 1 chưa test đủ (2026-09-15)
+
+Live-test trên sequence test riêng (`MCP ToolTest6 2026-09-15`, đã xoá). Dùng 3 ảnh thật trong bin
+"VN - WAG - BOOYAH-" (`WAG.PLS1.png`, `WAG.TQUY.png`, `WAG.HOANGM.png`) làm clip test, không sửa gì
+media gốc. Sequence thật "VN - WAG - BOOYAH-" xác nhận KHÔNG bị đụng (work area vẫn `-400000/-400000`
+sau khi xong).
+
+**Đúng, verify đầy đủ (10)**: `get_full_project_overview`, `get_project_panel_selection`,
+`move_playhead_to_edit`, `inspect_caption_tracks_uxp` (đọc đúng `trackCount:0` khi chưa có caption),
+`batch_rename_clips`, `set_clip_properties_batch`, `replace_clip`, `copy_effect_values` (verify qua
+`get_clip_effects` trên clip đích, đúng 3 param Gaussian Blur được copy), `set_xmp_metadata` (verify
+qua `get_clip_metadata` đọc lại raw XMP khớp 100%), `set_override_frame_rate` (verify qua
+`get_footage_interpretation`: 24 đúng như đã set).
+
+**🔴 2 bug/giới hạn xác nhận**:
+- `create_subsequence` — **chữ ký SAI**, gọi cả có `name` lẫn không đều `"Illegal Parameter type"`.
+  Cần probe lại `Sequence.createSubsequence` kỹ hơn (có thể cần object thay vì string, hoặc thứ tự
+  tham số khác `(sequenceName, name)` như đang đoán).
+- `set_override_pixel_aspect_ratio` — **chữ ký SAI**, thử cả number (`1.0`) lẫn string (`"1:1"`) đều
+  `"Illegal Parameter type"`. Khác `set_override_frame_rate` (cùng nhóm, đã verify đúng) — nhiều khả
+  năng `createSetOverridePixelAspectRatioAction` cần 1 object kiểu riêng (giống bài học
+  `set_sequence_pixel_aspect_ratio` cũ: cần đọc ra rồi mutate, không nhận giá trị thô).
+- `batch_enable_disable_clip` — lỗi `"Illegal Parameter type"` ở lần gọi đầu, nhưng do TRUYỀN SAI
+  THAM SỐ (thiếu `startSeconds/endSeconds`, dùng `clips` array không tồn tại trong schema thật) —
+  **lỗi dùng sai của phiên trước, không phải bug tool**. **Đã test lại đúng tham số 2026-09-15: XÁC
+  NHẬN ĐÚNG** — verify qua `get_clip_properties` đọc `disabled:true/false` khớp.
+- `select_clips_by_color`/`set_clip_color_label` — cũng là LỖI DÙNG SAI THAM SỐ của phiên trước
+  (`set_clip_color_label` nhận `{color: "iris"}` tên màu string, KHÔNG PHẢI `{colorLabelIndex: N}` —
+  gọi sai khiến `color` luôn `undefined` → luôn set về mặc định 0, tưởng nhầm là bug). **Đã test lại
+  đúng tham số: XÁC NHẬN CẢ 2 TOOL ĐÚNG** — set `color:"iris"` đọc lại `actualColorIndex:2` khớp,
+  `select_clips_by_color(colorLabelIndex:2)` chọn đúng đúng 1 clip vừa gán màu.
+- `set_source_in_out` — phụ thuộc `set_item_in_out` (tool CŨ từ batch trước, KHÔNG thuộc đợt 6) —
+  test lại phát hiện `set_item_in_out` hiện KHÔNG ỔN ĐỊNH: lỗi `"Illegal Parameter type"` trên ảnh
+  tĩnh (khác lỗi "script object no longer valid" ghi nhận lần trước — không nhất quán giữa các lần
+  gọi, nghi ngờ đúng giả thuyết cũ "MasterClip không áp dụng cho ảnh tĩnh"). Test với item VIDEO thật
+  thất bại vì lý do KHÁC: `find_project_item_by_name`/`getClipProjectItemByName` ưu tiên khớp BIN
+  trùng tên trước ITEM trùng tên (dự án có pattern đặt tên video trùng tên bin chứa nó) — ra lỗi
+  `"không phải là clip media hợp lệ"`. Đây là 2 vấn đề riêng biệt, sâu hơn phạm vi hôm nay — để dành
+  đợt sau, cần: (1) sửa ưu tiên tìm kiếm item-trước-bin khi trùng tên, (2) test `set_item_in_out` lại
+  với video thật SAU khi sửa (1).
+
+**🟡 Chưa test đủ**: `stabilize_clip` — phát hiện quan trọng: matchName đoán `"AE.ADBE Warp Stabilizer"`
+**SAI**, tên thật qua `search_effects("Stabilizer")` là **`"AE.ADBE SubspaceStabilizer"`** — cần sửa
+code theo bài học `crop_clip` cũ trước khi test lại. `match_frame` — lỗi
+`"Không tìm thấy project item \"Shot 1\""`: nghi ngờ BUG THẬT — tool có vẻ tìm project item theo TÊN
+CLIP TRÊN TIMELINE (bị đổi thành "Shot 1" bởi `batch_rename_clips` lúc test) thay vì tên PROJECT ITEM
+gốc — cần đọc lại code `matchFrame()` xem có đang lấy nhầm `trackItem.name` thay vì
+`projectItem.name`/`getMedia()` không. `select_clips_by_color`/`set_clip_color_label` — set màu label
+xong đọc lại `actualColorIndex` luôn ra 0 bất kể set gì, chưa rõ là do đọc sai field hay set không có
+tác dụng — cần điều tra riêng. `analyze_loudness`, `set_source_in_out`, `import_transcript_uxp` — KHÔNG
+đủ data test (không có clip audio thuần/Source Monitor mở/transcript thật sẵn trong sequence test lần
+này) — để dành đợt sau.
+
 ## 🔨 19 tool mới ĐỢT 6 — ĐÃ CODE, CHỜ RESTART (2026-09-15) — batch cuối cùng theo yêu cầu "build hết danh sách sheet"
 
 Theo yêu cầu build ~50 tool 1 lượt: sau khi rà kỹ toàn bộ phần còn lại của `AUDIT_MASTER_TOOL_LIST.md`

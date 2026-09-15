@@ -2779,11 +2779,11 @@ export const PREMIERE_TOOLS = [
   },
   {
     name: 'create_subsequence',
-    description: 'Tạo subsequence mới từ work area (in/out) hiện tại của sequence. CHƯA LIVE-TEST — chữ ký tham số chưa xác nhận.',
+    description: 'Tạo subsequence mới từ work area (in/out) hiện tại của sequence. LƯU Ý: Premiere tự đặt tên "{tên gốc}_Sub_NN", không dùng tên truyền vào — dùng get_sequence_count sau đó để lấy tên thật.',
     inputSchema: {
       type: 'object',
       properties: {
-        name: { type: 'string', description: 'Tên subsequence mới. Bỏ trống = tự đặt tên.' },
+        name: { type: 'string', description: 'Tên mong muốn — THỰC TẾ BỊ PREMIERE BỎ QUA, chỉ để tương thích. Bỏ trống = tự đặt tên.' },
         sequenceName: { type: 'string', description: 'Sequence nguồn. Bỏ trống = sequence active.' }
       },
       required: []
@@ -2967,7 +2967,7 @@ export const PREMIERE_TOOLS = [
   },
   {
     name: 'stabilize_clip',
-    description: 'Áp effect Warp Stabilizer lên clip đang chọn. CHƯA LIVE-TEST — matchName chưa xác nhận qua search_effects, và chưa rõ việc áp qua UXP có tự trigger phân tích như qua UI hay không.',
+    description: 'Áp effect Warp Stabilizer lên clip đang chọn (matchName "AE.ADBE SubspaceStabilizer" đã xác nhận qua search_effects). Chưa rõ việc áp qua UXP có tự trigger phân tích (analyze) như qua UI hay không — kiểm tra thủ công trong Premiere sau khi gọi.',
     inputSchema: { type: 'object', properties: {}, required: [] },
     execute(wsBridge) {
       return wsBridge.sendCommand('stabilize_clip', {}, 20000);
@@ -3017,7 +3017,7 @@ export const PREMIERE_TOOLS = [
   },
   {
     name: 'set_override_pixel_aspect_ratio',
-    description: 'Override pixel aspect ratio diễn giải của 1 project item — đường thay thế set_footage_interpretation, dùng createSetOverridePixelAspectRatioAction riêng biệt. CHƯA LIVE-TEST.',
+    description: 'Override pixel aspect ratio diễn giải của 1 project item — đường thay thế set_footage_interpretation, dùng createSetOverridePixelAspectRatioAction riêng biệt (chữ ký thật: numerator/denominator số riêng biệt, đã live-test xác nhận qua get_footage_interpretation).',
     inputSchema: {
       type: 'object',
       properties: {

@@ -6520,9 +6520,11 @@ async function addCustomMetadataField({ fieldName, type = "TEXT" }) {
   );
 }
 
-// create_subsequence — CHỮ KÝ CHƯA XÁC NHẬN (chưa live-test do cần thêm 1 vòng restart riêng chỉ để
-// probe, không đáng công so với giá trị). Đoán theo tên tham số hợp lý: tạo subsequence từ work area
-// (in/out) hiện tại của sequence active — dùng sequence.getInPoint()/getOutPoint() đã có sẵn.
+// sequence.createSubsequence CHỮ KÝ THẬT xác nhận qua live-test 2026-09-15:
+// (inSeconds: number, outSeconds: number, name: string) — SỐ GIÂY THÔ (không phải Time/TickTime
+// object từ getInPoint()/getOutPoint()), điểm ĐẶT TRƯỚC tên. LƯU Ý: tham số `name` bị Premiere BỎ
+// QUA trên thực tế — sequence mới luôn tự đặt tên theo pattern "{tên sequence gốc}_Sub_01" bất kể
+// truyền gì vào name. Verify qua get_sequence_count + get_total_clip_count trên sequence mới tạo.
 async function createSubsequenceTool({ name, sequenceName } = {}) {
   const project = await ppro.Project.getActiveProject();
   if (!project) throw new Error("Không tìm thấy project đang mở.");
@@ -6530,11 +6532,16 @@ async function createSubsequenceTool({ name, sequenceName } = {}) {
   if (!sequence) throw new Error("Không có sequence active và không truyền sequenceName.");
   const inPoint = await sequence.getInPoint();
   const outPoint = await sequence.getOutPoint();
+  const finalName = name || `${sequence.name} Subsequence`;
 
   const before = (await project.getSequences()).length;
-  await sequence.createSubsequence(name || `${sequence.name} Subsequence`, inPoint, outPoint);
+  await sequence.createSubsequence(inPoint.seconds, outPoint.seconds, finalName);
   const after = (await project.getSequences()).length;
-  return { created: after > before, name: name || `${sequence.name} Subsequence` };
+  return {
+    created: after > before,
+    requestedName: finalName,
+    note: "Premiere tự đặt tên sequence mới theo pattern \"{tên gốc}_Sub_NN\", KHÔNG dùng tên truyền vào — dùng get_sequence_count để lấy tên thật nếu cần thao tác tiếp."
+  };
 }
 
 // ============================================================================
@@ -6792,15 +6799,15 @@ async function setSourceInOut({ inSeconds, outSeconds }) {
 
 // --- Editing precision nâng cao ---
 
-// stabilize_clip — áp Warp Stabilizer (matchName xác nhận qua search_effects khi live-test) lên clip
-// đang chọn. LƯU Ý: Warp Stabilizer cần PHÂN TÍCH (analyze) trước khi thật sự ổn định hình — Premiere
-// tự chạy phân tích nền sau khi áp qua UI, nhưng CHƯA xác nhận việc áp qua UXP có tự trigger phân
-// tích hay không. matchName dùng "AE.ADBE Warp Stabilizer" — CHƯA xác nhận đúng, cần search_effects
-// live để chắc chắn (cùng bài học crop_clip: đừng đoán, luôn search_effects trước).
+// stabilize_clip — áp Warp Stabilizer lên clip đang chọn. matchName THẬT xác nhận qua search_effects
+// live-test 2026-09-15 là "AE.ADBE SubspaceStabilizer" (KHÔNG PHẢI "AE.ADBE Warp Stabilizer" như đoán
+// ban đầu — cùng bài học crop_clip cũ). LƯU Ý: Warp Stabilizer cần PHÂN TÍCH (analyze) trước khi thật
+// sự ổn định hình — Premiere tự chạy phân tích nền sau khi áp qua UI, nhưng CHƯA xác nhận việc áp qua
+// UXP có tự trigger phân tích hay không.
 async function stabilizeClip(_params, log) {
   const { clip } = await getActiveSequenceAndSelection(log);
   const project = await ppro.Project.getActiveProject();
-  const matchName = "AE.ADBE Warp Stabilizer";
+  const matchName = "AE.ADBE SubspaceStabilizer";
   const comp = await addEffectIfMissing(clip, project, matchName, "Warp Stabilizer", log || function () {});
   return {
     applied: !!comp, matchName,
@@ -6810,16 +6817,25 @@ async function stabilizeClip(_params, log) {
 
 // match_frame — mở Source Monitor tại đúng thời điểm NGUỒN tương ứng với vị trí playhead trên clip.
 async function matchFrame({ trackIndex = 0, trackType = "video" } = {}) {
-  const atPlayhead = await getClipAtPlayhead({ trackIndex, trackType });
-  if (!atPlayhead.found) throw new Error("Không có clip nào tại vị trí playhead trên track chỉ định.");
   const project = await ppro.Project.getActiveProject();
-  const item = await findProjectItemByName(project, atPlayhead.name);
-  if (!item) throw new Error(`Không tìm thấy project item "${atPlayhead.name}".`);
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+  const playhead = await sequence.getPlayerPosition();
+  const items = await getTrackItemsInRange(sequence, secondsToTick(Math.max(0, playhead.seconds - 0.001)), secondsToTick(playhead.seconds + 0.001), trackType);
+  const onTrack = items.find(i => i.trackIndex === trackIndex);
+  if (!onTrack) throw new Error("Không có clip nào tại vị trí playhead trên track chỉ định.");
+  const atPlayhead = {
+    name: await _safeCall(() => onTrack.item.getName()),
+    startSeconds: onTrack.itemStart.seconds
+  };
+  // Lấy project item TRỰC TIẾP từ track item (không search theo tên) — tên clip trên timeline có thể
+  // bị đổi khác tên project item gốc (vd qua batch_rename_clips), search theo tên sẽ tìm sai/không ra.
+  const item = await _safeCall(() => onTrack.item.getProjectItem());
+  if (!item) throw new Error(`Không lấy được project item của clip tại playhead (tên timeline: "${atPlayhead.name}").`);
   await ppro.SourceMonitor.openProjectItem(item);
   // Vị trí trong nguồn = offset trong clip + inPoint gốc — xấp xỉ bằng cách lấy playhead trừ start clip.
-  const sequence = await project.getActiveSequence();
-  const playhead = (await sequence.getPlayerPosition()).seconds;
-  const offsetInClip = playhead - atPlayhead.startSeconds;
+  const offsetInClip = playhead.seconds - atPlayhead.startSeconds;
   return { opened: true, itemName: atPlayhead.name, offsetInClipSeconds: offsetInClip };
 }
 
@@ -6859,17 +6875,29 @@ async function setOverrideFrameRate({ itemName, frameRate }) {
   return { itemName, frameRate };
 }
 
+// createSetOverridePixelAspectRatioAction CHỮ KÝ THẬT xác nhận qua live-test 2026-09-15:
+// (numerator: number, denominator: number) — 2 THAM SỐ SỐ RIÊNG BIỆT, KHÔNG PHẢI string "N:M" hay
+// số thô đơn lẻ (cả 2 cách đó đều "Illegal Parameter type"). Verify qua get_footage_interpretation:
+// set pixelAspectRatio=2 (numerator=2, denominator=1) đọc lại đúng 2, khác default 1.
 async function setOverridePixelAspectRatio({ itemName, pixelAspectRatio }) {
   if (!itemName) throw new Error("Phải truyền itemName.");
   if (pixelAspectRatio == null) throw new Error("Phải truyền pixelAspectRatio.");
-  const parString = String(pixelAspectRatio).includes(":") ? String(pixelAspectRatio) : `${pixelAspectRatio}:1`;
+  let numerator, denominator;
+  const str = String(pixelAspectRatio);
+  if (str.includes(":")) {
+    const [n, d] = str.split(":").map(Number);
+    numerator = n; denominator = d;
+  } else {
+    numerator = parseFloat(pixelAspectRatio);
+    denominator = 1;
+  }
   const { project, cpi } = await getClipProjectItemByName(itemName);
   await project.lockedAccess(() => {
     project.executeTransaction((ca) => {
-      ca.addAction(cpi.createSetOverridePixelAspectRatioAction(parString));
+      ca.addAction(cpi.createSetOverridePixelAspectRatioAction(numerator, denominator));
     }, "Set override pixel aspect ratio qua MCP");
   });
-  return { itemName, pixelAspectRatio: parString };
+  return { itemName, pixelAspectRatio: `${numerator}:${denominator}` };
 }
 
 // --- Audio phân tích ---
