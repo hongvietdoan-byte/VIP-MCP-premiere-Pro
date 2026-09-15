@@ -3681,6 +3681,45 @@ async function selectAllClips({ trackType = "all" }) {
   return { selected: selectError ? 0 : items.length, selectError };
 }
 
+// Chỉ dựng trên primitive đọc/chọn đã verify đúng nhiều lần (getTrackItemsInRange, _buildSelectionObject,
+// sequence.getSelection()/setSelection()) — KHÔNG gọi action lạ nào, an toàn.
+async function invertSelection() {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  const duration = await sequence.getEndTime();
+  const allItems = await getTrackItemsInRange(sequence, secondsToTick(0), duration, "all");
+
+  const selectedSignatures = new Set();
+  try {
+    const currentSelection = await sequence.getSelection();
+    const currentItems = await currentSelection.getTrackItems();
+    for (const item of currentItems) {
+      const trackIndex = await item.getTrackIndex();
+      const mt = await item.getMediaType();
+      const trackType = mt === ppro.Constants.MediaType.AUDIO ? "audio" : "video";
+      const startSeconds = (await item.getStartTime()).seconds;
+      selectedSignatures.add(`${trackType}|${trackIndex}|${startSeconds}`);
+    }
+  } catch (e) {
+    throw new Error(`Không đọc được selection hiện tại: ${e.message}`);
+  }
+
+  const toSelect = allItems.filter((i) => !selectedSignatures.has(`${i.trackType}|${i.trackIndex}|${i.itemStart.seconds}`));
+
+  let selectError = null;
+  try {
+    const selectionObj = await _buildSelectionObject(sequence, toSelect.map((i) => i.item));
+    await sequence.setSelection(selectionObj);
+  } catch (e) {
+    selectError = String(e && e.message || e);
+  }
+
+  return { selected: selectError ? 0 : toSelect.length, totalItems: allItems.length, wasSelected: selectedSignatures.size, selectError };
+}
+
 async function deselectAllClips() {
   const project = await ppro.Project.getActiveProject();
   if (!project) throw new Error("Không tìm thấy project đang mở.");
@@ -3694,6 +3733,52 @@ async function deselectAllClips() {
   }
 
   return { done: true };
+}
+
+// Chọn/bỏ chọn 1 clip cụ thể (theo vị trí+track) mà KHÔNG ảnh hưởng các clip đang chọn khác.
+// selected:true → thêm vào selection hiện tại (addItem, không clear). selected:false → xây lại
+// selection từ đầu trừ đúng clip đó (chưa xác nhận TrackItemSelection có removeItem hay không, nên
+// dùng đường an toàn: clearSelection() rồi add lại phần còn giữ).
+async function setClipSelection({ startSeconds, endSeconds, trackIndex, trackType = "video", selected }) {
+  if (startSeconds == null || endSeconds == null || trackIndex == null) {
+    throw new Error("Phải truyền startSeconds, endSeconds, trackIndex.");
+  }
+  if (selected == null) throw new Error("Phải truyền selected (true/false).");
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("Không tìm thấy project đang mở.");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("Không có sequence active.");
+
+  const target = await getTrackItemsInRange(sequence, secondsToTick(startSeconds), secondsToTick(endSeconds), trackType);
+  const targetOnTrack = target.filter((i) => i.trackIndex === trackIndex);
+  if (targetOnTrack.length === 0) {
+    throw new Error(`Không tìm thấy clip nào trên ${trackType} track ${trackIndex} trong khoảng ${startSeconds}-${endSeconds}s.`);
+  }
+
+  if (selected) {
+    const selectionObj = await _buildSelectionObject(sequence, targetOnTrack.map((i) => i.item));
+    await sequence.setSelection(selectionObj);
+    return { selected: true, added: targetOnTrack.length };
+  }
+
+  // Bỏ chọn: đọc selection hiện tại, loại trừ đúng target theo signature, dựng lại từ đầu.
+  const targetSignatures = new Set(targetOnTrack.map((i) => `${i.trackType}|${i.trackIndex}|${i.itemStart.seconds}`));
+  const currentSelection = await sequence.getSelection();
+  const currentItems = await currentSelection.getTrackItems();
+  const keep = [];
+  for (const item of currentItems) {
+    const idx = await item.getTrackIndex();
+    const mt = await item.getMediaType();
+    const tt = mt === ppro.Constants.MediaType.AUDIO ? "audio" : "video";
+    const st = (await item.getStartTime()).seconds;
+    if (!targetSignatures.has(`${tt}|${idx}|${st}`)) keep.push(item);
+  }
+  await sequence.clearSelection();
+  if (keep.length > 0) {
+    const selectionObj = await _buildSelectionObject(sequence, keep);
+    await sequence.setSelection(selectionObj);
+  }
+  return { selected: false, removed: targetOnTrack.length, remainingSelected: keep.length };
 }
 
 // ============================================================================

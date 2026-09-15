@@ -10,6 +10,15 @@ Trong lúc điều tra xem `add_transition` (hiện là stub báo "UXP chưa có
 
 `add_transition`/`batch_add_transitions` giữ nguyên là stub (báo hướng dẫn làm tay) như hiện tại — KHÔNG đổi.
 
+## 🔨 TỔNG HỢP các nhóm tool mới ĐÃ CODE, ĐANG CHỜ 1 LẦN RESTART TỔNG THỂ (2026-09-15)
+
+Theo yêu cầu user "cứ note lại nhóm này đợi restart 1 lần tổng thể" — dồn nhiều batch lại, restart 1 lần thay vì mỗi batch 1 lần:
+
+1. **Nhóm 4 — Bin & Project Item nâng cao** (5 tool, xem mục cũ phía dưới): `rename_project_item`, `delete_project_item`, `get_bin_contents`, `find_project_item_by_name`, `get_project_item_info`.
+2. **Nhóm 10 — Selection nâng cao** (2 tool, mới thêm 2026-09-15): `invert_selection` (đảo ngược selection hiện tại, dựng hoàn toàn trên primitive đọc/chọn đã verify — không gọi action lạ nào, an toàn), `set_clip_selection` (chọn/bỏ chọn 1 clip cụ thể không ảnh hưởng clip khác đang chọn — nhánh bỏ chọn dùng đường an toàn clearSelection()+rebuild vì chưa xác nhận `TrackItemSelection` có `removeItem()` hay không).
+
+**Cần restart app Claude 1 lần** để nạp toàn bộ schema mới (7 tool) trước khi live-test tất cả cùng lúc.
+
 ## 🔨 5 tool Bin & Project Item nâng cao mới — ĐÃ CODE, CHỜ RESTART ĐỂ LIVE-TEST (2026-09-15)
 
 Tiếp tục nhóm 4 (Bin & project item management) từ `AUDIT_MASTER_TOOL_LIST.md`. Probe trực tiếp prototype `ProjectItem`/`FolderItem` (hijack tạm `get_project_info`, không cần restart) xác nhận:

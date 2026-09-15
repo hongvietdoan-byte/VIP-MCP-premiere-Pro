@@ -2004,5 +2004,39 @@ export const PREMIERE_TOOLS = [
     execute(wsBridge, args) {
       return wsBridge.sendCommand('get_project_item_info', { itemName: args.itemName }, 15000);
     }
+  },
+
+  // ==========================================================================
+  // GROUP 27 — Selection nâng cao (2026-09-15)
+  // ==========================================================================
+  {
+    name: 'invert_selection',
+    description: 'Đảo ngược selection hiện tại trên timeline: clip đang chọn thì bỏ chọn, clip chưa chọn thì chọn.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    execute(wsBridge) {
+      return wsBridge.sendCommand('invert_selection', {}, 15000);
+    }
+  },
+
+  {
+    name: 'set_clip_selection',
+    description: 'Chọn hoặc bỏ chọn 1 clip cụ thể (theo vị trí + track) mà KHÔNG ảnh hưởng các clip đang chọn khác.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        startSeconds: { type: 'number', description: 'Bắt đầu khoảng chứa clip cần chọn/bỏ chọn (giây).' },
+        endSeconds: { type: 'number', description: 'Kết thúc khoảng (giây).' },
+        trackIndex: { type: 'number', description: 'Index track (0-based).' },
+        trackType: { type: 'string', enum: ['video', 'audio'], description: 'Mặc định "video".' },
+        selected: { type: 'boolean', description: 'true = chọn, false = bỏ chọn.' }
+      },
+      required: ['startSeconds', 'endSeconds', 'trackIndex', 'selected']
+    },
+    execute(wsBridge, args) {
+      return wsBridge.sendCommand('set_clip_selection', {
+        startSeconds: args.startSeconds, endSeconds: args.endSeconds,
+        trackIndex: args.trackIndex, trackType: args.trackType, selected: args.selected
+      }, 15000);
+    }
   }
 ];

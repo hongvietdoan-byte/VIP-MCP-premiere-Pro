@@ -219,7 +219,8 @@ function _sendReadyMessage() {
                    "get_playhead_position", "set_playhead_position",
                    "get_sequence_in_out_points", "set_sequence_in_out_points",
                    "rename_project_item", "delete_project_item", "get_bin_contents",
-                   "find_project_item_by_name", "get_project_item_info"]
+                   "find_project_item_by_name", "get_project_item_info",
+                   "invert_selection", "set_clip_selection"]
   }));
 }
 
@@ -382,6 +383,10 @@ async function _dispatchCommand(msg) {
       case "set_clip_rotation":      result = await setClipRotation(params, bLog);                 break;
       case "set_clip_opacity":       result = await setClipOpacity(params, bLog);                  break;
       case "get_clip_transform":     result = await getClipTransform(params, bLog);                break;
+
+      // Group 27: Selection nâng cao (2026-09-15)
+      case "invert_selection":       result = await invertSelection();                            break;
+      case "set_clip_selection":     result = await setClipSelection(params);                     break;
 
       // Group 26: Bin & Project Item nâng cao (2026-09-14)
       case "rename_project_item":    result = await renameProjectItem(params);                    break;
