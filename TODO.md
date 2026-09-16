@@ -1,6 +1,28 @@
 # TODO — Premiere MCP
 
-Cập nhật lần cuối: 2026-09-15. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
+Cập nhật lần cuối: 2026-09-16. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
+
+## ✅ Đối chiếu toàn bộ Google Sheet "Tool Status Tracker" với TODO.md — 121 dòng cập nhật (2026-09-16)
+
+Sheet gốc (`docs.google.com/.../1rAORu0avTydoyGG-cyaHtry5Lb7PKNkKA1IAUFD_cMI`) — 74 dòng tool hiện có +
+188 dòng đề xuất từ `AUDIT_MASTER_TOOL_LIST.md` — đã cũ, phản ánh trạng thái 2026-09-14 dù rất nhiều
+tool đã được code+live-test qua 6 đợt sau đó. Dùng 1 agent con đọc toàn bộ TODO.md (925 dòng) + memory
+đối chiếu từng dòng, tạo ra bảng diff 121 dòng cần đổi trạng thái (✅/❌/⚠️/◐ Một phần) kèm ghi chú lý do
+ngắn gọn (đặc biệt các dòng ❌ ghi rõ lý do để không ai tốn công thử lại).
+
+**Kỹ thuật cập nhật quan trọng cho lần sau**: dùng trình duyệt gõ trực tiếp vào Google Sheets (canvas-
+based, không phải DOM input) RẤT KHÔNG ổn định — `type` action không ghi được gì vào ô, `key` action
+tách chuỗi theo khoảng trắng nên câu dài bị mất chữ, và URL `&range=CELL` tuy chọn đúng ô nhưng không
+commit ô đang edit trước đó. Cách hoạt động: build toàn bộ nội dung thành CSV bằng script Python (đọc
+sheet cũ qua `read_file_content`, áp diff, escape đúng), rồi **tạo 1 Google Sheet MỚI** qua
+`create_file` với `contentMimeType: text/csv` (Drive tự convert CSV → Sheet thật, mọi ô đúng ngay lập
+tức, không cần thao tác trình duyệt nào) — nhanh hơn gõ tay hàng trăm lần. Lưu ý: file mới tạo ra nằm
+trong tài khoản Google Drive của connector phiên làm việc (không phải tài khoản sheet gốc) — phải
+`share_file` cấp quyền `writer` cho email thật của user ngay sau khi tạo.
+
+**Sheet mới (đã chia sẻ quyền writer cho hongviet.doan@garena.vn)**:
+`docs.google.com/spreadsheets/d/1ZKC4HHnEE6yUjsI68p3lkz8l11T9tmDjZksJkDmB4-c` — user tự quyết định
+copy đè lên sheet gốc hay dùng thẳng sheet mới.
 
 ## ✅ Verify LẦN CUỐI bản code đã dọn sạch (bỏ đoạn thử nhiều biến thể) — ĐÚNG (2026-09-15)
 
