@@ -1,6 +1,27 @@
 # TODO — Premiere MCP
 
-Cập nhật lần cuối: 2026-09-16. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
+Cập nhật lần cuối: 2026-09-20. Xem thêm chi tiết đầy đủ trong Claude memory: `premiere-mcp.md`.
+
+## 🔜 Tự động hoá việc bật plugin UXP — ĐÃ CÀI BỀN VỮNG, CHỜ VERIFY Ở LẦN MỞ PREMIERE SAU (2026-09-20)
+
+**Lý do**: mỗi lần mở lại Premiere, `ping` báo "plugin chưa kết nối" cho tới khi user tự nạp plugin
+(UXP Developer Tool) / mở panel. Premiere MCP v2 trước giờ chỉ là plugin "Developer" nạp qua UDT — KHÔNG
+bền qua lần khởi động; trong khi Beat Shake / Mic Check là plugin "External" nên Premiere tự nạp.
+
+**Phương án chọn (tối ưu, ít rủi ro nhất)**: cài Premiere MCP v2 thành plugin External y hệt 2 plugin kia
+bằng `scripts/install-plugin.ps1` (copy `plugin/` → `%APPDATA%\Adobe\UXP\Plugins\External\
+com.garena.premieremcp2_1.0.0` + thêm entry vào `PluginsInfo\v1\premierepro.json`, có backup `.bak`,
+idempotent, có `-Uninstall`). Đã chạy 2026-09-20, registry đã có entry. Loại bỏ: UI-automation bấm menu
+(fragile, hỏng khi khoá màn hình), UDT CLI (không có API load ổn định, UDT render D3D không chụp được).
+
+**Quy trình dùng**: sau MỖI lần sửa code `plugin/`, chạy lại `powershell -ExecutionPolicy Bypass -File
+scripts\install-plugin.ps1` rồi restart Premiere (bản cài là bản COPY, không tự theo repo). Không dùng
+song song bản nạp bằng UDT (trùng pluginId `com.garena.premieremcp2`) — gỡ khỏi UDT.
+
+**CHƯA verify** (không restart Premiere được vì đang mở project của user): (1) sau restart, plugin có
+xuất hiện ở Window > Extensions không; (2) mở panel 1 lần, để dock rồi lưu workspace — kỳ vọng Premiere
+tự mở lại panel lúc khởi động và `ping` kết nối luôn. Nếu panel KHÔNG tự mở lại: cân nhắc gán lại
+workspace mặc định có panel này, hoặc thêm hướng dẫn tự động trong `ping`/`get_status`.
 
 ## ✅ Đối chiếu toàn bộ Google Sheet "Tool Status Tracker" với TODO.md — 121 dòng cập nhật (2026-09-16)
 
