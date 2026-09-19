@@ -1,0 +1,1067 @@
+{
+ "_doc": "NGUỒN DUY NHẤT về trạng thái tool. Sửa bằng scripts/tool-status.py, đừng sửa tay số liệu ở nơi khác.",
+ "tools": {
+  "add_custom_metadata_field": {
+   "status": "unverified",
+   "lastTested": "2026-09-15",
+   "note": "Đã code (Metadata.addPropertyToProjectMetadataSchema) nhưng CHƯA live-test (rủi ro thay đổi schema project khó dọn) + chữ ký tham số thứ 3 CHƯA xác nhận",
+   "source": "sheet-2026-09-16 (dòng 254, gộp nhiều tool)"
+  },
+  "add_marker": {
+   "status": "untested",
+   "lastTested": null,
+   "note": "Chưa test qua tool MCP (marker dùng nhiều bên dự án Beat Shake khác - chưa xác nhận riêng cho premiere-mcp)",
+   "source": "sheet-2026-09-16 (dòng 68)"
+  },
+  "add_text_overlay": {
+   "status": "stub",
+   "lastTested": null,
+   "note": "Stub THẬT: code luôn trả cứng added:false + câu nhắc làm tay, KHÔNG gọi API Premiere nào bất kể input - không cần test",
+   "source": "sheet-2026-09-16 (dòng 64)"
+  },
+  "add_transition": {
+   "status": "stub",
+   "lastTested": "2026-09-14",
+   "note": "Xác nhận là stub cố định CÓ CHỦ ĐÍCH (không phải bug): createAddVideoTransitionAction đã làm TREO Premiere thật khi probe (2026-09-14) — quyết định không thử lại, giữ nguyên stub báo hướng dẫn làm tay",
+   "source": "sheet-2026-09-16 (dòng 41)"
+  },
+  "adjust_color_values": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Bug fix matchName \"AE.ADBE Lumetri\". Live-tested: exposure:0.5 → verify qua get_value_at_time = 0.5 đúng",
+   "source": "sheet-2026-09-16 (dòng 45)"
+  },
+  "analyze_loudness": {
+   "status": "partial",
+   "lastTested": "2026-09-15",
+   "note": "Đã code nhưng KHÔNG PHẢI EBU R128 LUFS thật (chỉ Peak/RMS dBFS xấp xỉ, thiếu K-weighting filter) — đã cảnh báo rõ trong tool. CHƯA đủ data live-test (thiếu clip audio thuần/Source Monitor mở). normalize_loudness_file chưa làm",
+   "source": "sheet-2026-09-16 (dòng 204, gộp nhiều tool)"
+  },
+  "apply_audio_effect": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Bug fix: bọc nhầm trong lockedAccess() (không cần cho bước tạo component). Live-tested đúng",
+   "source": "sheet-2026-09-16 (dòng 186, gộp nhiều tool)"
+  },
+  "apply_effect": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Bug fix: findComponentByMatchName so khớp linh hoạt bỏ qua prefix \"AE.\" (Premiere lưu matchName có prefix, lúc gọi apply không có). componentIndex trả đúng thay vì luôn -1",
+   "source": "sheet-2026-09-16 (dòng 36)"
+  },
+  "apply_lumetri_preset": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Bug fix cùng lúc với adjust_color_values: matchName đúng là \"AE.ADBE Lumetri\" (không phải \"ADBE Lumetri Color\"). Live-test trực tiếp tập trung ở adjust_color_values (cùng root cause), apply_lumetri_preset dùng chung fix",
+   "source": "sheet-2026-09-16 (dòng 43)"
+  },
+  "apply_lut": {
+   "status": "partial",
+   "lastTested": "2026-09-14",
+   "note": "XÁC NHẬN THIẾT KẾ SAI (không phải bug nhỏ): InputLUTID là GUID tham chiếu catalog nội bộ Premiere, không phải path file .cube — set path trực tiếp không lỗi nhưng cũng không đổi gì",
+   "source": "sheet-2026-09-16 (dòng 193, gộp nhiều tool)"
+  },
+  "attach_proxy": {
+   "status": "partial",
+   "lastTested": "2026-09-15",
+   "note": "FIX chữ ký: cpi.attachProxy(path) thiếu tham số — đúng cần 2 tham số (path, boolean isHiRes). Không lỗi khi gọi nhưng test bằng ảnh PNG giả (không phải proxy video hợp lệ) nên get_proxy_info đọc lại vẫn hasProxy:false — CHƯA xác nhận end-to-end với file .mp4 thật.",
+   "source": "sheet-2026-09-16 (dòng 132, gộp nhiều tool)"
+  },
+  "audit_timeline_health": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "audit_timeline_health đã code + live-tested đúng",
+   "source": "sheet-2026-09-16 (dòng 149, gộp nhiều tool)"
+  },
+  "auto_caption_from_speech": {
+   "status": "untested",
+   "lastTested": null,
+   "note": "Chưa test",
+   "source": "sheet-2026-09-16 (dòng 54)"
+  },
+  "batch_add_transitions": {
+   "status": "stub",
+   "lastTested": "2026-09-14",
+   "note": "Cùng lý do với add_transition — rủi ro treo máy",
+   "source": "sheet-2026-09-16 (dòng 42)"
+  },
+  "batch_apply_effect": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested đúng trên 4 clip cùng lúc, verify qua get_clip_effects.",
+   "source": "sheet-2026-09-16 (dòng 187, gộp nhiều tool)"
+  },
+  "batch_enable_disable_clip": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-test đúng (verify qua get_clip_properties disabled true/false)",
+   "source": "TODO/memory 2026-09-15"
+  },
+  "batch_place_clips": {
+   "status": "ok",
+   "lastTested": "2026-09-10",
+   "note": "Dùng trong Mic Check workflow, live-tested 64/64 ảnh đặt đúng",
+   "source": "sheet-2026-09-16 (dòng 18)"
+  },
+  "batch_rename_clips": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "rename_clip live-tested 2026-09-14; batch_rename_clips live-tested 2026-09-15",
+   "source": "sheet-2026-09-16 (dòng 162, gộp nhiều tool)"
+  },
+  "capture_frame": {
+   "status": "untested",
+   "lastTested": null,
+   "note": "Chưa test",
+   "source": "sheet-2026-09-16 (dòng 65)"
+  },
+  "check_offline_media": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "check_offline_media đã code + live-tested đúng",
+   "source": "sheet-2026-09-16 (dòng 114, gộp nhiều tool)"
+  },
+  "clear_item_in_out": {
+   "status": "partial",
+   "lastTested": "2026-09-15",
+   "note": "ĐÍNH CHÍNH so với sheet cũ (từng ghi ✅): clear_item_in_out ổn định đúng, nhưng set_item_in_out phát hiện 2026-09-15 KHÔNG ỔN ĐỊNH — lỗi \"Illegal Parameter type\" trên ảnh tĩnh không nhất quán giữa các lần gọi; cũng lộ bug tìm kiếm ưu tiên BIN trùng tên trước ITEM khi tên trùng — cần sửa trước khi test lại với video thật",
+   "source": "sheet-2026-09-16 (dòng 117, gộp nhiều tool)"
+  },
+  "close_sequence": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested: sequence không mất dữ liệu, chỉ đóng tab; active sequence tự chuyển đúng.",
+   "source": "sheet-2026-09-16 (dòng 138, gộp nhiều tool)"
+  },
+  "copy_effect_values": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested đúng, verify effect xuất hiện trên clip đích.",
+   "source": "sheet-2026-09-16 (dòng 192, gộp nhiều tool)"
+  },
+  "copy_effects_between_clips": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested đúng, verify effect xuất hiện trên clip đích.",
+   "source": "sheet-2026-09-16 (dòng 192, gộp nhiều tool)"
+  },
+  "create_bin": {
+   "status": "ok",
+   "lastTested": "2026-09-10",
+   "note": "Fix createBinAction 2026-09-10 - live-tested",
+   "source": "sheet-2026-09-16 (dòng 7)"
+  },
+  "create_caption_track": {
+   "status": "partial",
+   "lastTested": "2026-09-14",
+   "note": "Chưa test trực tiếp tool này. Sequence.createCaptionTrack đã xác nhận KHÔNG tồn tại trong UXP - audit 2026-09-14 cross-check thêm với sample Transcript chính thức Adobe (chỉ có import/export JSON, không có API tạo Caption Track) + cả 4 repo cộng đồng còn lại claim làm được đều dùng CEP/ExtendScript - xác nhận GIỚI HẠN THẬT của hệ sinh thái, không phải do thiếu tìm",
+   "source": "sheet-2026-09-16 (dòng 46)"
+  },
+  "create_sequence": {
+   "status": "ok",
+   "lastTested": "2026-09-10",
+   "note": "Viết lại 2026-09-10, live-tested 60fps/23.976fps/custom size",
+   "source": "sheet-2026-09-16 (dòng 9)"
+  },
+  "create_sequence_from_media": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-test đúng, 3 item vào đúng sequence mới",
+   "source": "TODO/memory 2026-09-15"
+  },
+  "create_subclip": {
+   "status": "partial",
+   "lastTested": "2026-09-15",
+   "note": "Chữ ký ĐÚNG là 4 tham số (name, TickTime, TickTime, boolean) — thiếu tham số 4 ném lỗi, phải gọi trong project.lockedAccess(). Nhưng trên ẢNH TĨNH: executeTransaction không lỗi mà KHÔNG tạo ra subclip thật (verify find_project_item_by_name = false). Nghi ngờ chỉ hoạt động với video thật (MasterClip). Cần test lại với .mp4.",
+   "source": "sheet-2026-09-16 (dòng 124, gộp nhiều tool)"
+  },
+  "create_subsequence": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Chữ ký thật tìm ra: sequence.createSubsequence(inSeconds, outSeconds, name) — số giây thô, tham số name bị Premiere ÂM THẦM BỎ QUA (luôn tự đặt tên \"{gốc}_Sub_01\"). Live-tested đúng",
+   "source": "sheet-2026-09-16 (dòng 144, gộp nhiều tool)"
+  },
+  "crop_clip": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Bug fix matchName (\"AE.ADBE AECrop\", không phải \"AE.ADBE Crop\") + live-tested đúng",
+   "source": "sheet-2026-09-16 (dòng 170, gộp nhiều tool)"
+  },
+  "cut_clip_at_time": {
+   "status": "untested",
+   "lastTested": null,
+   "note": "Chưa test - cần QE DOM. Audit 2026-09-14 cross-check: cả 2 repo UXP-first (nepfaff, CaYatur) đều không né được QE DOM cho thao tác cắt/trim nâng cao - QE DOM legacy nhưng vẫn hoạt động, không phải bug của mình, chấp nhận dùng tiếp",
+   "source": "sheet-2026-09-16 (dòng 21)"
+  },
+  "delete_clip": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "FIX 2026-09-14 nhờ audit sample Adobe chính thức: createRemoveItemsAction(selection, ripple, mediaType) cần 3 tham số - thiếu MediaType (thứ 3) là lý do 9 lần thử trước đều sai. Live-tested xoá thường + ripple",
+   "source": "sheet-2026-09-16 (dòng 22)"
+  },
+  "delete_project_item": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested đúng, verify độc lập.",
+   "source": "sheet-2026-09-16 (dòng 107, gộp nhiều tool)"
+  },
+  "delete_sequence": {
+   "status": "ok",
+   "lastTested": "2026-09-10",
+   "note": "Live-tested, verify read-back",
+   "source": "sheet-2026-09-16 (dòng 10)"
+  },
+  "deselect_all_clips": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Live-tested, dùng sequence.clearSelection() trực tiếp (bỏ nhánh createSelectItemsAction chết)",
+   "source": "sheet-2026-09-16 (dòng 27)"
+  },
+  "detect_scene_edits": {
+   "status": "stub",
+   "lastTested": "2026-09-14",
+   "note": "Xác nhận là stub cố định, API UXP chưa hỗ trợ",
+   "source": "sheet-2026-09-16 (dòng 60)"
+  },
+  "detect_silence_regions": {
+   "status": "infeasible",
+   "lastTested": "2026-09-14",
+   "note": "Đường đọc file đã fix (lỗi double-encode URL pathToRawFileUrl), nhưng lộ giới hạn: thiếu hàm decode audio (decodeAudioDataFromUint8/decodeToFloat32Mono) — chưa từng viết ở đâu trong repo, chỉ được gọi. Không dùng được cho tới khi viết decoder WAV/MP3 riêng cho UXP",
+   "source": "sheet-2026-09-16 (dòng 29)"
+  },
+  "duplicate_clip": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "FIX 2026-09-14: sửa originalStart tính sai (getInPoint→getStartTime). LƯU Ý: offsetSeconds < duration clip gốc sẽ cắt vỡ clip gốc thành nhiều mảnh (hành vi native, không phải bug)",
+   "source": "sheet-2026-09-16 (dòng 24)"
+  },
+  "duplicate_sequence": {
+   "status": "ok",
+   "lastTested": "2026-09-09",
+   "note": "Xác nhận hoạt động đúng",
+   "source": "sheet-2026-09-16 (dòng 11)"
+  },
+  "enable_disable_clip": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "enable_disable_clip live-tested 2026-09-14; batch_enable_disable_clip xác nhận đúng sau khi test lại đúng tham số (startSeconds/endSeconds/trackIndex/enabled)",
+   "source": "sheet-2026-09-16 (dòng 163, gộp nhiều tool)"
+  },
+  "export_as_xml": {
+   "status": "stub",
+   "lastTested": "2026-09-14",
+   "note": "Xác nhận là stub cố định, API UXP chưa hỗ trợ",
+   "source": "sheet-2026-09-16 (dòng 66)"
+  },
+  "export_to_media_encoder": {
+   "status": "untested",
+   "lastTested": null,
+   "note": "Chưa test",
+   "source": "sheet-2026-09-16 (dòng 67)"
+  },
+  "extract_selection": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code + live-tested đúng sau fix bug mediaType comparison",
+   "source": "sheet-2026-09-16 (dòng 154, gộp nhiều tool)"
+  },
+  "find_project_item_by_name": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested đúng, dùng làm verify cho nhiều tool khác trong session.",
+   "source": "sheet-2026-09-16 (dòng 109, gộp nhiều tool)"
+  },
+  "freeze_frame": {
+   "status": "stub",
+   "lastTested": "2026-09-14",
+   "note": "Cùng lý do với set_clip_speed",
+   "source": "sheet-2026-09-16 (dòng 57)"
+  },
+  "generate_and_import_srt": {
+   "status": "untested",
+   "lastTested": null,
+   "note": "Chưa test",
+   "source": "sheet-2026-09-16 (dòng 51)"
+  },
+  "get_bin_contents": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested đúng.",
+   "source": "sheet-2026-09-16 (dòng 105, gộp nhiều tool)"
+  },
+  "get_clip_at_playhead": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested đúng, đã fix cửa sổ ±1 tick quanh playhead để tránh bỏ sót clip trùng biên.",
+   "source": "sheet-2026-09-16 (dòng 165, gộp nhiều tool)"
+  },
+  "get_clip_effects": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Dùng làm verify cho rất nhiều tool khác xuyên suốt dự án — xác nhận hoạt động đúng",
+   "source": "sheet-2026-09-16 (dòng 37)"
+  },
+  "get_clip_lut": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Đọc InputLUTID đúng (GUID)",
+   "source": "TODO/memory 2026-09-15"
+  },
+  "get_clip_metadata": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "FIX 2026-09-14: API ở namespace tĩnh ppro.Metadata.getXMPMetadata(), không phải trên ProjectItem. Sửa thêm parse Language-Alternative (rdf:Alt/rdf:li) cho field dc:description. Live-tested",
+   "source": "sheet-2026-09-16 (dòng 61)"
+  },
+  "get_clip_properties": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested đúng, đọc đủ field.",
+   "source": "sheet-2026-09-16 (dòng 166, gộp nhiều tool)"
+  },
+  "get_clip_speed": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested đúng.",
+   "source": "sheet-2026-09-16 (dòng 174, gộp nhiều tool)"
+  },
+  "get_clip_transcript_uxp": {
+   "status": "unverified",
+   "lastTested": "2026-09-15",
+   "note": "Đã code (Transcript.exportToJSON) nhưng KHÔNG tìm ra chữ ký đúng dù thử nhiều biến thể — không loại trừ do thiếu clip có transcript thật để test",
+   "source": "sheet-2026-09-16 (dòng 223, gộp nhiều tool)"
+  },
+  "get_clip_transform": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Đã code + live-tested đúng (cả 5 field position/scale/rotation/opacity/anchor khớp)",
+   "source": "sheet-2026-09-16 (dòng 175, gộp nhiều tool)"
+  },
+  "get_clip_volume": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code + live-tested đúng, không bug",
+   "source": "sheet-2026-09-16 (dòng 202, gộp nhiều tool)"
+  },
+  "get_duplicate_media": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "get_duplicate_media đã code + live-tested đúng. consolidate_duplicates CHƯA làm — cố ý bỏ qua vì mutating rủi ro cao, không hoàn tác được",
+   "source": "sheet-2026-09-16 (dòng 112, gộp nhiều tool)"
+  },
+  "get_effect_properties": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code + live-tested đúng",
+   "source": "sheet-2026-09-16 (dòng 189, gộp nhiều tool)"
+  },
+  "get_file_metadata": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Cùng fix Promise property với set_item_start_time. durationSeconds ảnh tĩnh ra 43200 (12 tiếng, default Premiere cho still image, không phải bug).",
+   "source": "sheet-2026-09-16 (dòng 252, gộp nhiều tool)"
+  },
+  "get_footage_interpretation": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "BUG ĐÃ FIX: setFrameRate() nhận SỐ THÔ (không phải object FrameRate như Sequence). Partial-update (chỉ 1 field) cho kết quả sai khó lường qua nhiều lần gọi — giờ BẮT BUỘC truyền cả 2 field cùng lúc, verify ổn định.",
+   "source": "sheet-2026-09-16 (dòng 122, gộp nhiều tool)"
+  },
+  "get_full_project_overview": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Đã code + live-tested đúng (đợt 6)",
+   "source": "sheet-2026-09-16 (dòng 101, gộp nhiều tool)"
+  },
+  "get_full_sequence_info": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "BUG ĐÃ FIX: sequence.guid là object cần .toString(), JSON.stringify trực tiếp ra {}.",
+   "source": "sheet-2026-09-16 (dòng 140, gộp nhiều tool)"
+  },
+  "get_keyframes": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code + live-tested đúng",
+   "source": "sheet-2026-09-16 (dòng 79, gộp nhiều tool)"
+  },
+  "get_next_edit_point": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "get_next_edit_point live-tested 2026-09-14; move_playhead_to_edit live-tested 2026-09-15. go_to_next_edit/go_to_previous_edit riêng biệt chưa rõ có tách tool hay gộp chung",
+   "source": "sheet-2026-09-16 (dòng 168, gộp nhiều tool)"
+  },
+  "get_playhead_position": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Live-test đúng",
+   "source": "TODO/memory 2026-09-15"
+  },
+  "get_project_info": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đọc project/sequence/bin đúng. Bins list dùng getItems() - đã sửa nhưng chưa live-test riêng nếu có bin lồng nhau",
+   "source": "sheet-2026-09-16 (dòng 4)"
+  },
+  "get_project_item_info": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested đúng.",
+   "source": "sheet-2026-09-16 (dòng 110, gộp nhiều tool)"
+  },
+  "get_project_panel_selection": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-test đúng",
+   "source": "TODO/memory 2026-09-15"
+  },
+  "get_proxy_info": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Live-test đúng (hasProxy false với file không phải proxy thật)",
+   "source": "TODO/memory 2026-09-15"
+  },
+  "get_sequence_count": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested đúng.",
+   "source": "sheet-2026-09-16 (dòng 139, gộp nhiều tool)"
+  },
+  "get_sequence_in_out_points": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "get/set_sequence_in_out_points đã code + live-tested đúng 2026-09-14 (bao gồm partial-update giữ nguyên outSeconds khi chỉ set inSeconds). clear_sequence_in_out riêng biệt chưa có (đạt được qua set sentinel)",
+   "source": "sheet-2026-09-16 (dòng 142, gộp nhiều tool)"
+  },
+  "get_sequence_settings": {
+   "status": "ok",
+   "lastTested": "2026-09-10",
+   "note": "Live-tested đầy đủ, chỉ hoạt động từ Premiere 26.2+",
+   "source": "sheet-2026-09-16 (dòng 14)"
+  },
+  "get_source_monitor_clip": {
+   "status": "partial",
+   "lastTested": "2026-09-15",
+   "note": "ĐÍNH CHÍNH so với sheet cũ (từng ghi ✅ toàn bộ): open_in_source_monitor/get_source_monitor_clip live-tested đúng, nhưng set_source_in_out phụ thuộc set_item_in_out (xem STT 117) hiện KHÔNG ỔN ĐỊNH — chưa live-test thành công độc lập",
+   "source": "sheet-2026-09-16 (dòng 257, gộp nhiều tool)"
+  },
+  "get_timeline_gaps": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "get_timeline_gaps đã code + live-tested đúng",
+   "source": "sheet-2026-09-16 (dòng 169, gộp nhiều tool)"
+  },
+  "get_total_clip_count": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested đúng.",
+   "source": "sheet-2026-09-16 (dòng 167, gộp nhiều tool)"
+  },
+  "get_track_info": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code + live-tested đúng",
+   "source": "sheet-2026-09-16 (dòng 88, gộp nhiều tool)"
+  },
+  "get_transcript_languages_uxp": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Cả 2 đã code + live-tested đúng (get_transcript_languages_uxp trả đúng 18 ngôn ngữ thật)",
+   "source": "sheet-2026-09-16 (dòng 224, gộp nhiều tool)"
+  },
+  "get_unused_media": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Bug fix (getId() phải cast ngược ProjectItem trước khi gọi) + live-tested đúng. get_used_media_report chưa làm riêng",
+   "source": "sheet-2026-09-16 (dòng 113, gộp nhiều tool)"
+  },
+  "get_value_at_time": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code + live-tested đúng (verify nội suy linear)",
+   "source": "sheet-2026-09-16 (dòng 80, gộp nhiều tool)"
+  },
+  "get_zero_point": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-test đúng cùng set_zero_point",
+   "source": "TODO/memory 2026-09-15"
+  },
+  "has_transcript_uxp": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Cả 2 đã code + live-tested đúng (get_transcript_languages_uxp trả đúng 18 ngôn ngữ thật)",
+   "source": "sheet-2026-09-16 (dòng 224, gộp nhiều tool)"
+  },
+  "import_ae_comps": {
+   "status": "unverified",
+   "lastTested": "2026-09-15",
+   "note": "Đã code (đoán theo pattern importFiles) nhưng CHƯA đủ dữ liệu test — không có file .aep thật trong máy",
+   "source": "sheet-2026-09-16 (dòng 127, gộp nhiều tool)"
+  },
+  "import_files": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Live-tested nhiều lần (Mic Check 64 ảnh, icon.png test)",
+   "source": "sheet-2026-09-16 (dòng 5)"
+  },
+  "import_image_sequence": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Đã code + live-tested đúng (verify qua durationSeconds=0.1668s ≈ 5 frame@30fps, khác still image thường 43200s)",
+   "source": "sheet-2026-09-16 (dòng 126, gộp nhiều tool)"
+  },
+  "import_mogrt": {
+   "status": "untested",
+   "lastTested": null,
+   "note": "Chưa test",
+   "source": "sheet-2026-09-16 (dòng 63)"
+  },
+  "import_mogrt_from_library": {
+   "status": "unverified",
+   "lastTested": "2026-09-15",
+   "note": "Đã code (SequenceEditor.insertMogrtFromLibrary) nhưng CHƯA verify được — không có Creative Cloud Library MOGRT thật để test với ID hợp lệ",
+   "source": "sheet-2026-09-16 (dòng 246, gộp nhiều tool)"
+  },
+  "import_sequences": {
+   "status": "unverified",
+   "lastTested": "2026-09-15",
+   "note": "Đã code + thử với .prproj THẬT nhưng KHÔNG tìm ra chữ ký đúng (\"Not Enough Parameters\"/\"Illegal Parameter type\" dù thử nhiều biến thể)",
+   "source": "sheet-2026-09-16 (dòng 128, gộp nhiều tool)"
+  },
+  "import_srt": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Xác nhận hoạt động đúng — import vào Project panel đúng",
+   "source": "sheet-2026-09-16 (dòng 47)"
+  },
+  "import_transcript_json": {
+   "status": "untested",
+   "lastTested": null,
+   "note": "Chưa test (đánh dấu \"thử nghiệm\" trong TODO gốc)",
+   "source": "sheet-2026-09-16 (dòng 52)"
+  },
+  "import_transcript_uxp": {
+   "status": "unverified",
+   "lastTested": "2026-09-15",
+   "note": "Đã code (alias import_transcript_json đã có) nhưng CHƯA đủ data live-test — không có transcript thật sẵn trong sequence test",
+   "source": "sheet-2026-09-16 (dòng 225, gộp nhiều tool)"
+  },
+  "insert_clip": {
+   "status": "ok",
+   "lastTested": "2026-09-10",
+   "note": "Fix vị trí + duration 2026-09-10, live-tested nhiều lần",
+   "source": "sheet-2026-09-16 (dòng 16)"
+  },
+  "insert_mogrt_caption": {
+   "status": "partial",
+   "lastTested": "2026-09-14",
+   "note": "Vị trí/thời lượng ĐÚNG (live-tested), nhưng set TEXT không được - component Graphic Group không có API drill xuống text layer con. Audit 2026-09-14 cross-check: sample effects.ts Adobe official cũng chỉ dùng getComponentChain() để thêm/xoá component, không đọc/ghi param; cả 5 repo cộng đồng không repo nào cite được API text thật (CaYatur tự đánh dấu tool tương tự của họ là \"possibly broken\") - xác nhận GIỚI HẠN THẬT của cả hệ sinh thái UXP",
+   "source": "sheet-2026-09-16 (dòng 49)"
+  },
+  "inspect_caption_tracks_uxp": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Đã code + live-tested đúng (đọc đúng trackCount:0 khi chưa có caption)",
+   "source": "sheet-2026-09-16 (dòng 227, gộp nhiều tool)"
+  },
+  "invert_selection": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "BUG ĐÃ FIX: sequence.setSelection() cộng dồn thay vì thay thế selection cũ (_buildSelectionObject lấy getSelection() hiện tại rồi addItem thêm vào) — invert ban đầu chọn nhầm cả 2 tập. Fix: clearSelection() trước khi set. Cùng fix áp dụng cho select_all_clips/select_clips_in_range.",
+   "source": "sheet-2026-09-16 (dòng 183, gộp nhiều tool)"
+  },
+  "lift_selection": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code + live-tested đúng",
+   "source": "sheet-2026-09-16 (dòng 155, gộp nhiều tool)"
+  },
+  "list_available_transitions": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Xác nhận hoạt động đúng — 155 kết quả LIVE THẬT (không phải database tĩnh dù mô tả tool ghi \"offline\")",
+   "source": "sheet-2026-09-16 (dòng 40)"
+  },
+  "list_sequence_tracks": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code + live-tested đúng",
+   "source": "sheet-2026-09-16 (dòng 89, gộp nhiều tool)"
+  },
+  "match_frame": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Bug fix: dùng trackItem.getProjectItem() trực tiếp thay vì search theo tên clip trên timeline. Live-tested xác nhận đúng",
+   "source": "sheet-2026-09-16 (dòng 173, gộp nhiều tool)"
+  },
+  "move_clip": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Unblock + live-tested lần đầu, sau khi fix select_all_clips",
+   "source": "sheet-2026-09-16 (dòng 19)"
+  },
+  "move_item_to_bin": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "BUG MỚI đã fix (2026-09-15, ngoài fix cũ 2026-09-14): hàm chỉ scan rootItem.getItems() LITERAL, bỏ sót item nằm trong bin con — trong khi import_files không truyền binName thường đặt item vào \"insertion bin\" hiện tại (không phải luôn root). Đã fix dùng findProjectItemInBin đệ quy.",
+   "source": "sheet-2026-09-16 (dòng 8)"
+  },
+  "move_items_to_bin": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Wrapper batch trên move_item_to_bin — logic đúng (báo lỗi riêng từng item, không crash cả batch). Verify đúng sau khi fix bug gốc move_item_to_bin (xem dòng move_item_to_bin).",
+   "source": "sheet-2026-09-16 (dòng 106, gộp nhiều tool)"
+  },
+  "move_playhead_to_edit": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "get_next_edit_point live-tested 2026-09-14; move_playhead_to_edit live-tested 2026-09-15. go_to_next_edit/go_to_previous_edit riêng biệt chưa rõ có tách tool hay gộp chung",
+   "source": "sheet-2026-09-16 (dòng 168, gộp nhiều tool)"
+  },
+  "mute_track": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Bug fix: track.createSetMuteAction() không tồn tại, sửa dùng track.setMute() trực tiếp. Live-tested mute/unmute cả 2 chiều",
+   "source": "sheet-2026-09-16 (dòng 33)"
+  },
+  "open_in_source_monitor": {
+   "status": "partial",
+   "lastTested": "2026-09-15",
+   "note": "ĐÍNH CHÍNH so với sheet cũ (từng ghi ✅ toàn bộ): open_in_source_monitor/get_source_monitor_clip live-tested đúng, nhưng set_source_in_out phụ thuộc set_item_in_out (xem STT 117) hiện KHÔNG ỔN ĐỊNH — chưa live-test thành công độc lập",
+   "source": "sheet-2026-09-16 (dòng 257, gộp nhiều tool)"
+  },
+  "open_project": {
+   "status": "untested",
+   "lastTested": null,
+   "note": "KHÔNG phải stub thật (khác add_text_overlay) - có gọi API thật ppro.Project.openDocument(), chỉ là chưa bao giờ live-test trên máy thật. TODO gốc 2026-09-10 xếp nhầm chung nhóm \"stub\" với add_text_overlay",
+   "source": "sheet-2026-09-16 (dòng 6)"
+  },
+  "overwrite_clip": {
+   "status": "ok",
+   "lastTested": "2026-09-10",
+   "note": "Cùng fix với insert_clip, live-tested + idempotent (gọi lại 2-3 lần vẫn đúng)",
+   "source": "sheet-2026-09-16 (dòng 17)"
+  },
+  "read_sequence_captions": {
+   "status": "untested",
+   "lastTested": null,
+   "note": "Chưa test",
+   "source": "sheet-2026-09-16 (dòng 48)"
+  },
+  "refresh_media": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested, không lỗi.",
+   "source": "sheet-2026-09-16 (dòng 116, gộp nhiều tool)"
+  },
+  "relink_offline_media": {
+   "status": "untested",
+   "lastTested": null,
+   "note": "Đọc code: hiện chỉ trả message hướng dẫn thủ công, chưa tự relink thật - nghi ngờ là stub",
+   "source": "sheet-2026-09-16 (dòng 59)"
+  },
+  "remove_all_effects": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Cả 2 đã code + live-tested đúng. remove_all_effects có bug an toàn đã fix (mặc định bỏ qua Motion/Opacity)",
+   "source": "sheet-2026-09-16 (dòng 188, gộp nhiều tool)"
+  },
+  "remove_effect": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Xác nhận hoạt động đúng, không cần sửa",
+   "source": "sheet-2026-09-16 (dòng 39)"
+  },
+  "remove_effect_by_name": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Cả 2 đã code + live-tested đúng. remove_all_effects có bug an toàn đã fix (mặc định bỏ qua Motion/Opacity)",
+   "source": "sheet-2026-09-16 (dòng 188, gộp nhiều tool)"
+  },
+  "remove_keyframe": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code + fix bug crash \"start time should be less than stoptime\" (pad ±1ms) + live-tested",
+   "source": "sheet-2026-09-16 (dòng 77, gộp nhiều tool)"
+  },
+  "remove_keyframe_range": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code + live-tested đúng",
+   "source": "sheet-2026-09-16 (dòng 78, gộp nhiều tool)"
+  },
+  "remove_marker": {
+   "status": "untested",
+   "lastTested": null,
+   "note": "Chưa test",
+   "source": "sheet-2026-09-16 (dòng 69)"
+  },
+  "remove_selected_clips": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Bug fix mediaType comparison (getMediaType() trả object enum, không phải string) + live-tested đúng",
+   "source": "sheet-2026-09-16 (dòng 158, gộp nhiều tool)"
+  },
+  "remove_silence_gaps": {
+   "status": "infeasible",
+   "lastTested": "2026-09-14",
+   "note": "Cùng giới hạn với detect_silence_regions — thiếu audio decoder",
+   "source": "sheet-2026-09-16 (dòng 30)"
+  },
+  "remove_transition": {
+   "status": "untested",
+   "lastTested": null,
+   "note": "CHƯA live-test — không có transition sẵn trên sequence test, và không dùng add_transition để tạo data test (rủi ro treo Premiere đã biết). Cần user tự kéo tay 1 transition vào clip test qua UI trước khi test tool này.",
+   "source": "sheet-2026-09-16 (dòng 197, gộp nhiều tool)"
+  },
+  "rename_clip": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "rename_clip live-tested 2026-09-14; batch_rename_clips live-tested 2026-09-15",
+   "source": "sheet-2026-09-16 (dòng 162, gộp nhiều tool)"
+  },
+  "rename_project_item": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested đúng, verify qua find_project_item_by_name.",
+   "source": "sheet-2026-09-16 (dòng 108, gộp nhiều tool)"
+  },
+  "rename_track": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code (createSetNameAction) + live-tested đúng, verify read-back",
+   "source": "sheet-2026-09-16 (dòng 86, gộp nhiều tool)"
+  },
+  "replace_clip": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Đã code + live-tested đúng (đợt 6)",
+   "source": "sheet-2026-09-16 (dòng 161, gộp nhiều tool)"
+  },
+  "replace_clip_media": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Fix changeMediaFilePath (thay changeMediaSource cũ sai) verify đúng — cũng có tác dụng phụ đưa clip online lại nếu media path mới hợp lệ.",
+   "source": "sheet-2026-09-16 (dòng 58)"
+  },
+  "reverse_clip": {
+   "status": "stub",
+   "lastTested": "2026-09-14",
+   "note": "Cùng lý do với set_clip_speed",
+   "source": "sheet-2026-09-16 (dòng 56)"
+  },
+  "ripple_delete": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Cùng fix với delete_clip. Live-tested: clip sau tự dịch trái đúng khi ripple",
+   "source": "sheet-2026-09-16 (dòng 23)"
+  },
+  "roll_edit": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code + live-tested đúng (verify actualLeftEnd/actualRightStart khớp thật)",
+   "source": "sheet-2026-09-16 (dòng 151, gộp nhiều tool)"
+  },
+  "save_project": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code (project.save()) + live-tested đúng",
+   "source": "sheet-2026-09-16 (dòng 91, gộp nhiều tool)"
+  },
+  "save_project_as": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code (project.saveAs()) + live-tested đúng. LƯU Ý hành vi: sau khi gọi, project active chuyển hẳn sang file mới (giống Premiere thật)",
+   "source": "sheet-2026-09-16 (dòng 92, gộp nhiều tool)"
+  },
+  "search_effects": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Dùng thành công nhiều lần xuyên suốt dự án (tìm matchName đúng cho crop_clip \"AE.ADBE AECrop\", stabilize_clip \"AE.ADBE SubspaceStabilizer\") — xác nhận hoạt động đúng qua sử dụng thực tế. Bug crash \"Cannot read properties of null\" đã fix (effect audio matchName null)",
+   "source": "sheet-2026-09-16 (dòng 35)"
+  },
+  "select_all_clips": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "FIX LẦN 2 2026-09-14: setSelection() cần object TrackItemSelection (lấy qua getSelection()+addItem), không phải mảng thô như fix lần 1 (09-10) tưởng đúng",
+   "source": "sheet-2026-09-16 (dòng 25)"
+  },
+  "select_clips_by_color": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested đúng.",
+   "source": "sheet-2026-09-16 (dòng 184, gộp nhiều tool)"
+  },
+  "select_clips_by_name": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested đúng.",
+   "source": "sheet-2026-09-16 (dòng 184, gộp nhiều tool)"
+  },
+  "select_clips_in_range": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Cùng fix với select_all_clips - live-tested đúng theo range",
+   "source": "sheet-2026-09-16 (dòng 26)"
+  },
+  "select_disabled_clips": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested đúng.",
+   "source": "sheet-2026-09-16 (dòng 184, gộp nhiều tool)"
+  },
+  "set_active_sequence": {
+   "status": "ok",
+   "lastTested": "2026-09-09",
+   "note": "Xác nhận hoạt động đúng",
+   "source": "sheet-2026-09-16 (dòng 12)"
+  },
+  "set_clip_anchor_point": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code + live-tested đúng",
+   "source": "sheet-2026-09-16 (dòng 179, gộp nhiều tool)"
+  },
+  "set_clip_color_label": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Bug fix: logic if/else bị đảo ngược + tham số đúng là {color:\"iris\"} (tên string), không phải {colorLabelIndex:N}. Live-tested: \"iris\" → actualColorIndex:2 đúng",
+   "source": "sheet-2026-09-16 (dòng 44)"
+  },
+  "set_clip_metadata": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "FIX 2026-09-14: ppro.Metadata.createSetXMPMetadataAction(). Sửa thêm bug phụ: field ghi thiếu khai báo xmlns:dc bị Premiere âm thầm bỏ qua - tạo rdf:Description riêng có khai báo dc. Live-tested",
+   "source": "sheet-2026-09-16 (dòng 62)"
+  },
+  "set_clip_mute": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code + live-tested đúng cả 2 chiều mute/unmute",
+   "source": "sheet-2026-09-16 (dòng 203, gộp nhiều tool)"
+  },
+  "set_clip_opacity": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code + live-tested đúng",
+   "source": "sheet-2026-09-16 (dòng 177, gộp nhiều tool)"
+  },
+  "set_clip_pan": {
+   "status": "infeasible",
+   "lastTested": "2026-09-14",
+   "note": "GIỚI HẠN THẬT đã xác nhận kỹ (7+ biến thể qua 2 vòng điều tra): thêm effect \"Balance\" qua AudioFilterFactory.createComponentByDisplayName(\"Balance\", clip) (2 tham số) thành công, nhưng ghi giá trị vào param \"Balance\" hoàn toàn không có tác dụng — không phải do sai API, là giới hạn thật của component audio filter loại này",
+   "source": "sheet-2026-09-16 (dòng 32)"
+  },
+  "set_clip_position": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "set_clip_position/set_clip_scale đã code + live-tested đúng (sau fix bug đơn vị pixel↔chuẩn hoá 0-1). set_scale_width_height/set_uniform_scale riêng chưa tách tool",
+   "source": "sheet-2026-09-16 (dòng 178, gộp nhiều tool)"
+  },
+  "set_clip_properties_batch": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "set_clip_properties_batch đã code + live-tested đúng (đợt 6)",
+   "source": "sheet-2026-09-16 (dòng 176, gộp nhiều tool)"
+  },
+  "set_clip_rotation": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code + live-tested đúng",
+   "source": "sheet-2026-09-16 (dòng 179, gộp nhiều tool)"
+  },
+  "set_clip_scale": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "set_clip_position/set_clip_scale đã code + live-tested đúng (sau fix bug đơn vị pixel↔chuẩn hoá 0-1). set_scale_width_height/set_uniform_scale riêng chưa tách tool",
+   "source": "sheet-2026-09-16 (dòng 178, gộp nhiều tool)"
+  },
+  "set_clip_selection": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested cả 2 chiều true/false đều đúng, không ảnh hưởng clip khác.",
+   "source": "sheet-2026-09-16 (dòng 185, gộp nhiều tool)"
+  },
+  "set_clip_speed": {
+   "status": "stub",
+   "lastTested": "2026-09-14",
+   "note": "Xác nhận là stub cố định: API UXP chưa hỗ trợ ở bản Premiere này, code trả applied:false kèm hướng dẫn làm tay, không throw lỗi mù mờ",
+   "source": "sheet-2026-09-16 (dòng 55)"
+  },
+  "set_clip_transform": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Đã code + live-tested đúng (cả 5 field position/scale/rotation/opacity/anchor khớp)",
+   "source": "sheet-2026-09-16 (dòng 175, gộp nhiều tool)"
+  },
+  "set_clip_volume": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Xác nhận hoạt động đúng (1 lần đọc \"0\" là fluke, retry 2 lần đều đúng)",
+   "source": "sheet-2026-09-16 (dòng 31)"
+  },
+  "set_clips_volume": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code + live-tested đúng",
+   "source": "sheet-2026-09-16 (dòng 201, gộp nhiều tool)"
+  },
+  "set_effect_param": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Bug fix: thiếu bật createSetTimeVaryingAction(true) trước khi add keyframe nên chỉ ghi giá trị tĩnh, không tạo animation thật. Đã fix + live-tested",
+   "source": "sheet-2026-09-16 (dòng 38)"
+  },
+  "set_footage_interpretation": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "BUG ĐÃ FIX: setFrameRate() nhận SỐ THÔ (không phải object FrameRate như Sequence). Partial-update (chỉ 1 field) cho kết quả sai khó lường qua nhiều lần gọi — giờ BẮT BUỘC truyền cả 2 field cùng lúc, verify ổn định.",
+   "source": "sheet-2026-09-16 (dòng 122, gộp nhiều tool)"
+  },
+  "set_item_in_out": {
+   "status": "partial",
+   "lastTested": "2026-09-15",
+   "note": "ĐÍNH CHÍNH so với sheet cũ (từng ghi ✅): clear_item_in_out ổn định đúng, nhưng set_item_in_out phát hiện 2026-09-15 KHÔNG ỔN ĐỊNH — lỗi \"Illegal Parameter type\" trên ảnh tĩnh không nhất quán giữa các lần gọi; cũng lộ bug tìm kiếm ưu tiên BIN trùng tên trước ITEM khi tên trùng — cần sửa trước khi test lại với video thật",
+   "source": "sheet-2026-09-16 (dòng 117, gộp nhiều tool)"
+  },
+  "set_item_start_time": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Fix Promise property, live-test đúng",
+   "source": "TODO/memory 2026-09-15"
+  },
+  "set_keyframe_interpolation": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Đã code + live-tested đúng",
+   "source": "sheet-2026-09-16 (dòng 81, gộp nhiều tool)"
+  },
+  "set_offline": {
+   "status": "partial",
+   "lastTested": "2026-09-15",
+   "note": "GIỚI HẠN THẬT (không phải bug): offline:true hoạt động đúng, nhưng offline:false KHÔNG khôi phục online được (verify qua object cpi hoàn toàn mới, loại trừ cache). Phải dùng relink_offline_media hoặc Link Media thủ công để khôi phục.",
+   "source": "sheet-2026-09-16 (dòng 115, gộp nhiều tool)"
+  },
+  "set_override_frame_rate": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Cả 2 đã live-test đúng sau khi tìm ra chữ ký thật: createSetOverridePixelAspectRatioAction(numerator, denominator) — 2 số riêng biệt, không phải string \"N:M\"",
+   "source": "sheet-2026-09-16 (dòng 119, gộp nhiều tool)"
+  },
+  "set_override_pixel_aspect_ratio": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Cả 2 đã live-test đúng sau khi tìm ra chữ ký thật: createSetOverridePixelAspectRatioAction(numerator, denominator) — 2 số riêng biệt, không phải string \"N:M\"",
+   "source": "sheet-2026-09-16 (dòng 119, gộp nhiều tool)"
+  },
+  "set_playhead_position": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Live-test đúng",
+   "source": "TODO/memory 2026-09-15"
+  },
+  "set_scale_to_frame_size": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested, không lỗi.",
+   "source": "sheet-2026-09-16 (dòng 120, gộp nhiều tool)"
+  },
+  "set_sequence_display_format": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "BUG ĐÃ FIX: setVideoFrameRect() cần object ĐÃ ĐỌC RA (getVideoFrameRect()) rồi mutate .width/.height — object phẳng mới dựng bị âm thầm bỏ qua, không lỗi nhưng không đổi gì.",
+   "source": "sheet-2026-09-16 (dòng 141, gộp nhiều tool)"
+  },
+  "set_sequence_field_type": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "BUG ĐÃ FIX: setVideoFrameRect() cần object ĐÃ ĐỌC RA (getVideoFrameRect()) rồi mutate .width/.height — object phẳng mới dựng bị âm thầm bỏ qua, không lỗi nhưng không đổi gì.",
+   "source": "sheet-2026-09-16 (dòng 141, gộp nhiều tool)"
+  },
+  "set_sequence_frame_rate": {
+   "status": "ok",
+   "lastTested": "2026-09-10",
+   "note": "Live-tested 60↔23.976fps. Còn thiếu test 24/25/29.97/30/50/59.94",
+   "source": "sheet-2026-09-16 (dòng 15)"
+  },
+  "set_sequence_in_out_points": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "get/set_sequence_in_out_points đã code + live-tested đúng 2026-09-14 (bao gồm partial-update giữ nguyên outSeconds khi chỉ set inSeconds). clear_sequence_in_out riêng biệt chưa có (đạt được qua set sentinel)",
+   "source": "sheet-2026-09-16 (dòng 142, gộp nhiều tool)"
+  },
+  "set_sequence_pixel_aspect_ratio": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "BUG ĐÃ FIX: setVideoFrameRect() cần object ĐÃ ĐỌC RA (getVideoFrameRect()) rồi mutate .width/.height — object phẳng mới dựng bị âm thầm bỏ qua, không lỗi nhưng không đổi gì.",
+   "source": "sheet-2026-09-16 (dòng 141, gộp nhiều tool)"
+  },
+  "set_sequence_resolution": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "BUG ĐÃ FIX: setVideoFrameRect() cần object ĐÃ ĐỌC RA (getVideoFrameRect()) rồi mutate .width/.height — object phẳng mới dựng bị âm thầm bỏ qua, không lỗi nhưng không đổi gì.",
+   "source": "sheet-2026-09-16 (dòng 141, gộp nhiều tool)"
+  },
+  "set_source_in_out": {
+   "status": "partial",
+   "lastTested": "2026-09-15",
+   "note": "ĐÍNH CHÍNH so với sheet cũ (từng ghi ✅ toàn bộ): open_in_source_monitor/get_source_monitor_clip live-tested đúng, nhưng set_source_in_out phụ thuộc set_item_in_out (xem STT 117) hiện KHÔNG ỔN ĐỊNH — chưa live-test thành công độc lập",
+   "source": "sheet-2026-09-16 (dòng 257, gộp nhiều tool)"
+  },
+  "set_xmp_metadata": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "set_xmp_metadata (ghi RAW toàn bộ XMP) đã code + live-tested đúng (verify qua get_clip_metadata khớp 100%). Đọc RAW XMP dùng lại get_clip_metadata đã có sẵn",
+   "source": "sheet-2026-09-16 (dòng 251, gộp nhiều tool)"
+  },
+  "set_zero_point": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "Live-tested đúng, verify độc lập.",
+   "source": "sheet-2026-09-16 (dòng 131, gộp nhiều tool)"
+  },
+  "setup_audio_ducking": {
+   "status": "untested",
+   "lastTested": null,
+   "note": "Chưa test",
+   "source": "sheet-2026-09-16 (dòng 34)"
+  },
+  "slip_edit": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "Bug fix: createSetInPointAction/createSetOutPointAction âm thầm dịch cả vị trí timeline — fix bằng đo drift rồi bù createMoveAction(-drift). Live-tested với clip video thật",
+   "source": "sheet-2026-09-16 (dòng 152, gộp nhiều tool)"
+  },
+  "srt_to_mogrt_captions": {
+   "status": "partial",
+   "lastTested": "2026-09-14",
+   "note": "Cùng giới hạn với insert_mogrt_caption - vị trí đúng nhưng text không set được (xem cross-check chi tiết ở dòng insert_mogrt_caption)",
+   "source": "sheet-2026-09-16 (dòng 50)"
+  },
+  "stabilize_clip": {
+   "status": "ok",
+   "lastTested": "2026-09-15",
+   "note": "stabilize_clip bug fix matchName (\"AE.ADBE SubspaceStabilizer\") + live-tested xác nhận đúng sau restart lần 2 (32 param). inspect_stabilizer_status riêng chưa làm",
+   "source": "sheet-2026-09-16 (dòng 171, gộp nhiều tool)"
+  },
+  "transcribe_clip": {
+   "status": "untested",
+   "lastTested": null,
+   "note": "Chưa test",
+   "source": "sheet-2026-09-16 (dòng 53)"
+  },
+  "trim_clip": {
+   "status": "ok",
+   "lastTested": "2026-09-14",
+   "note": "FIX 2026-09-14: đổi sang createSetStartAction/createSetEndAction - code cũ dùng nhầm source-trim API gây crash native \"nullptr\"",
+   "source": "sheet-2026-09-16 (dòng 20)"
+  },
+  "update_marker": {
+   "status": "untested",
+   "lastTested": null,
+   "note": "Chưa test",
+   "source": "sheet-2026-09-16 (dòng 70)"
+  }
+ }
+}

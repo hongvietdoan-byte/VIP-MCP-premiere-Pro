@@ -19,6 +19,22 @@ sửa nhiều tool (xem các mục bên dưới) nên cách này tệ hơn.
 - Việc bấm Load trong UDT mỗi lần mở Premiere CHƯA tự động hoá được (UDT là Electron/D3D, không chụp
   màn hình để bấm được). Loại bỏ: UI-automation bấm menu Window > Extensions (dễ hỏng khi khoá màn hình).
 
+## 📊 Quy trình theo dõi trạng thái tool — 1 NGUỒN DUY NHẤT (2026-09-20)
+
+**Vấn đề**: ghi trạng thái ở nhiều nơi (TODO.md, Google Sheet, log riêng của test ban đêm) → gộp lại dễ
+lệch/sai. **Giải pháp**: `tool-status.json` là nguồn duy nhất (177 tool, danh sách lấy từ code nên tổng
+luôn đúng); mọi bản xem khác đều SINH TỰ ĐỘNG từ nó, không sửa tay:
+- `py scripts/tool-status.py report` — đối chiếu code ↔ trạng thái, đếm theo trạng thái, báo lệch (tool
+  mới chưa có trạng thái / trạng thái của tool đã xoá / ✅ không có ngày test).
+- Test ban đêm (task 22h) CHỈ APPEND vào `nightly-results.jsonl` (không sửa tool-status.json) → không xung
+  đột. Sáng hôm sau: `review` (xem kết quả kèm bằng chứng verify) → `apply` (hợp nhất; tool đã chốt
+  infeasible/stub bị chặn, cần `--force`) → `markdown` (sinh `TOOL_STATUS.md`) → `csv` (xuất file cho Google
+  Sheet, tạo sheet mới bằng `create_file` text/csv như đã làm 2026-09-16).
+- Sheet/TOOL_STATUS.md là BẢN XUẤT: không sửa tay; sửa trạng thái chỉ qua tool-status.json (hoặc `apply`).
+- Số liệu hiện tại (177 tool trong code): ✅131, ◐13, ⚠️6, ⏳16, ⛔8, ❌3. Dòng ✅ gộp từ bảng sheet cũ nên
+  tool thuộc dòng gộp nhiều tool mang "source: ...gộp nhiều tool" — kiểm tra lại khi có dịp.
+- Danh sách 188 ý tưởng audit (chưa code) vẫn nằm ở sheet/AUDIT_MASTER_TOOL_LIST.md, không thuộc file này.
+
 ## ✅ Đối chiếu toàn bộ Google Sheet "Tool Status Tracker" với TODO.md — 121 dòng cập nhật (2026-09-16)
 
 Sheet gốc (`docs.google.com/.../1rAORu0avTydoyGG-cyaHtry5Lb7PKNkKA1IAUFD_cMI`) — 74 dòng tool hiện có +
